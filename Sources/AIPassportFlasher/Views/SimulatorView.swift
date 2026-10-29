@@ -701,6 +701,8 @@ final class SimulatorHost: ObservableObject {
 
 @MainActor
 final class SimulatorWebController: ObservableObject {
+    static var active: SimulatorWebController?
+
     weak var webView: WKWebView?
     var pageReady = false
     var loadedRequestID = -1
@@ -730,6 +732,57 @@ final class SimulatorWebController: ObservableObject {
                 NSPasteboard.general.writeObjects([image])
                 SimulatorSession.shared.showToast("屏幕截图已复制到剪贴板")
             }
+        }
+    }
+
+    func captureDevice(to url: URL) async {
+        guard let webView,
+              let values = try? await webView.evaluateJavaScript(
+                "(() => { const r = document.querySelector('.passport-shell').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()"
+              ) as? [Double],
+              values.count == 4 else { return }
+        let bounds = webView.bounds
+        let requested = CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+            .insetBy(dx: -18, dy: -18)
+            .intersection(bounds)
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = requested
+        let image = await snapshot(configuration: configuration)
+        guard let image,
+              let data = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: data),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return }
+        do { try png.write(to: url) }
+        catch { FileHandle.standardError.write(Data("[snapshot] write \(url.lastPathComponent) failed: \(error)\n".utf8)) }
+    }
+
+    func captureLongPressPreview(to url: URL) async {
+        guard let webView else { return }
+        let show = """
+        (() => {
+          const button = document.querySelector('.hardware-key[data-key="OK"]');
+          if (!button) return false;
+          button.classList.add('is-pressed', 'apf-holding');
+          const ring = button.querySelector('.apf-hold-ring rect');
+          if (ring) ring.style.strokeDashoffset = '0.28';
+          return true;
+        })()
+        """
+        _ = try? await webView.evaluateJavaScript(show)
+        await captureDevice(to: url)
+        _ = try? await webView.evaluateJavaScript(
+            "(() => { const b = document.querySelector('.hardware-key[data-key=\"OK\"]'); if (b) { b.classList.remove('is-pressed', 'apf-holding'); const r = b.querySelector('.apf-hold-ring rect'); if (r) r.style.strokeDashoffset = '1'; } })()"
+        )
+    }
+
+    func snapshotWebView() async -> NSImage? {
+        await snapshot(configuration: nil)
+    }
+
+    private func snapshot(configuration: WKSnapshotConfiguration?) async -> NSImage? {
+        guard let webView else { return nil }
+        return await withCheckedContinuation { continuation in
+            webView.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
         }
     }
 
@@ -775,6 +828,7 @@ struct SimulatorWebView: NSViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsMagnification = false
+        SimulatorWebController.active = controller
         controller.webView = webView
         controller.pageReady = false
         controller.loadedRequestID = session.requestID
@@ -1095,6 +1149,8 @@ enum SimulatorBridgeScript {
             root: !!root,
             toolbarHidden: getComputedStyle(document.querySelector('.toolbar')).display === 'none',
             libraryHidden: getComputedStyle(document.querySelector('.try-panel')).display === 'none',
+            physicalKeys: document.querySelectorAll('.hardware-key.apf-physical-key').length,
+            holdRings: document.querySelectorAll('.hardware-key .apf-hold-ring').length,
             state: (byId('runtime-light') || { dataset: {} }).dataset.state,
           };
         },
@@ -1107,6 +1163,103 @@ enum SimulatorBridgeScript {
           while (shell.firstChild) content.appendChild(shell.firstChild);
           shell.appendChild(content);
         }
+        const keyVisuals = {
+          POWER: { icon: '⏻', title: '电源 · P · 长按 2 秒', hold: 2000 },
+          UP: { icon: '↑', title: '向上 · 键盘 ↑', hold: 0 },
+          DOWN: { icon: '↓', title: '向下 · 键盘 ↓', hold: 0 },
+          OK: { icon: '✓', title: '确认 · Return · 长按 0.5 秒', hold: 500 },
+        };
+        const keyButtons = new Map();
+        const activeHolds = new Map();
+        const stopHold = (key, completed = false) => {
+          const active = activeHolds.get(key);
+          if (active) cancelAnimationFrame(active.frame);
+          activeHolds.delete(key);
+          const button = keyButtons.get(key);
+          if (!button) return;
+          button.classList.remove('apf-holding');
+          if (completed) {
+            button.classList.add('apf-long-ready');
+            setTimeout(() => {
+              button.classList.remove('apf-long-ready');
+              const path = button.querySelector('.apf-hold-ring rect');
+              if (path) path.style.strokeDashoffset = '1';
+            }, 260);
+          } else {
+            const path = button.querySelector('.apf-hold-ring rect');
+            if (path) path.style.strokeDashoffset = '1';
+          }
+        };
+        const startHold = (key) => {
+          const visual = keyVisuals[key];
+          const button = keyButtons.get(key);
+          if (!button || !visual || !visual.hold || activeHolds.has(key)) return;
+          const path = button.querySelector('.apf-hold-ring rect');
+          const started = performance.now();
+          button.classList.remove('apf-long-ready');
+          button.classList.add('apf-holding');
+          const tick = (now) => {
+            const progress = Math.min(1, (now - started) / visual.hold);
+            if (path) path.style.strokeDashoffset = String(1 - progress);
+            if (progress >= 1) {
+              activeHolds.delete(key);
+              button.classList.remove('apf-holding');
+              button.classList.add('apf-long-ready');
+              return;
+            }
+            const active = activeHolds.get(key);
+            if (active) active.frame = requestAnimationFrame(tick);
+          };
+          activeHolds.set(key, { frame: requestAnimationFrame(tick) });
+        };
+        for (const button of document.querySelectorAll('.hardware-key[data-key]')) {
+          const key = button.dataset.key;
+          const visual = keyVisuals[key];
+          if (!visual) continue;
+          keyButtons.set(key, button);
+          button.classList.add('apf-physical-key');
+          button.title = visual.title;
+          button.setAttribute('aria-label', visual.title);
+          button.replaceChildren();
+
+          const face = document.createElement('span');
+          face.className = 'apf-key-face';
+          const label = document.createElement('span');
+          label.className = 'apf-key-label';
+          label.textContent = visual.icon;
+          button.append(face, label);
+
+          if (visual.hold) {
+            const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            ring.classList.add('apf-hold-ring');
+            ring.setAttribute('viewBox', '0 0 32 48');
+            ring.setAttribute('aria-hidden', 'true');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            path.setAttribute('x', '2');
+            path.setAttribute('y', '2');
+            path.setAttribute('width', '28');
+            path.setAttribute('height', '44');
+            path.setAttribute('rx', '14');
+            path.setAttribute('pathLength', '1');
+            ring.append(path);
+            button.append(ring);
+            button.addEventListener('pointerdown', () => startHold(key));
+            button.addEventListener('pointerup', () => stopHold(key, button.classList.contains('apf-long-ready')));
+            button.addEventListener('pointercancel', () => stopHold(key));
+          }
+        }
+        const shortcutKeys = { Enter: 'OK', p: 'POWER', P: 'POWER' };
+        document.addEventListener('keydown', (event) => {
+          const key = shortcutKeys[event.key];
+          if (key && !event.repeat) startHold(key);
+        });
+        document.addEventListener('keyup', (event) => {
+          const key = shortcutKeys[event.key];
+          if (key) stopHold(key, keyButtons.get(key)?.classList.contains('apf-long-ready'));
+        });
+        window.addEventListener('blur', () => {
+          for (const key of activeHolds.keys()) stopHold(key);
+        });
         const watched = ['runtime-light', 'runtime-state', 'loading-stage', 'loading-percent', 'loading-detail',
           'screen-overlay', 'audio-enable', 'microphone-toggle', 'recording-toggle', 'recording-download'];
         const observer = new MutationObserver(schedule);
@@ -1169,13 +1322,152 @@ enum SimulatorTheme {
     @media (prefers-color-scheme: dark) {
       .passport-shell { box-shadow: 0 18px 34px rgba(0, 0, 0, .42) !important; }
     }
-    .screen-overlay strong, .loading-progress-meta, .loading-progress small, .hardware-key span {
+    .screen-overlay strong, .loading-progress-meta, .loading-progress small {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
       letter-spacing: 0 !important;
     }
     .loading-progress-track span { background: #20E47C !important; box-shadow: none !important; }
-    .hardware-key:hover { border-color: #20E47C !important; }
-    .hardware-key:focus-visible { outline: 2px solid #20E47C; outline-offset: 2px; }
+    .hardware-controls {
+      z-index: 4 !important;
+      pointer-events: none !important;
+    }
+    .hardware-key.apf-physical-key {
+      --apf-key-x: -50%;
+      width: clamp(28px, 4.5%, 34px) !important;
+      min-width: 28px !important;
+      height: clamp(40px, 7%, 48px) !important;
+      min-height: 40px !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      pointer-events: auto !important;
+      appearance: none !important;
+      border: 1px solid rgba(239, 248, 245, .50) !important;
+      border-radius: 999px !important;
+      color: #F2F8F5 !important;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, .32), rgba(255, 255, 255, .08) 28%, transparent 47%),
+        linear-gradient(155deg, rgba(102, 116, 116, .92), rgba(24, 31, 33, .98) 48%, rgba(7, 10, 12, .98)) !important;
+      box-shadow:
+        inset 1px 1px 1px rgba(255, 255, 255, .38),
+        inset -2px -3px 5px rgba(0, 0, 0, .72),
+        0 4px 8px rgba(0, 0, 0, .48),
+        0 0 0 3px rgba(225, 240, 235, .10) !important;
+      text-shadow: none !important;
+      transform: translateX(var(--apf-key-x)) translateY(0) scale(1) !important;
+      transition:
+        transform .10s cubic-bezier(.2, .8, .2, 1),
+        border-color .15s ease,
+        box-shadow .15s ease,
+        filter .15s ease !important;
+    }
+    .hardware-key.apf-physical-key .apf-key-face {
+      position: absolute;
+      inset: 4px 5px 5px;
+      border-radius: inherit;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .16), transparent 48%) !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16);
+      pointer-events: none;
+    }
+    .hardware-key.apf-physical-key .apf-key-label {
+      position: absolute;
+      top: 50%;
+      right: calc(100% + 8px);
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-radius: 9px;
+      color: rgba(244, 249, 247, .94);
+      background: rgba(17, 22, 23, .78) !important;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .08);
+      backdrop-filter: blur(9px);
+      font: 700 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+      letter-spacing: 0 !important;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .hardware-key.apf-physical-key.key-power .apf-key-label {
+      right: auto;
+      left: calc(100% + 8px);
+      font-size: 14px !important;
+    }
+    .hardware-key.apf-physical-key .apf-hold-ring {
+      position: absolute;
+      inset: -5px;
+      width: calc(100% + 10px);
+      height: calc(100% + 10px);
+      overflow: visible;
+      opacity: 0;
+      pointer-events: none;
+      filter: drop-shadow(0 0 4px rgba(32, 228, 124, .60));
+      transition: opacity .12s ease;
+    }
+    .hardware-key.apf-physical-key .apf-hold-ring rect {
+      fill: none;
+      stroke: #20E47C;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+    .hardware-key.apf-physical-key.apf-holding .apf-hold-ring,
+    .hardware-key.apf-physical-key.apf-long-ready .apf-hold-ring {
+      opacity: 1;
+    }
+    .hardware-key.apf-physical-key:hover {
+      border-color: rgba(32, 228, 124, .92) !important;
+      filter: brightness(1.08);
+      box-shadow:
+        inset 1px 1px 1px rgba(255, 255, 255, .44),
+        inset -2px -3px 5px rgba(0, 0, 0, .68),
+        0 4px 9px rgba(0, 0, 0, .48),
+        0 0 14px rgba(32, 228, 124, .34) !important;
+    }
+    .hardware-key.apf-physical-key:active,
+    .hardware-key.apf-physical-key.is-pressed {
+      transform: translateX(var(--apf-key-x)) translateY(2px) scale(.92) !important;
+      border-color: rgba(32, 228, 124, .90) !important;
+      box-shadow:
+        inset 2px 4px 8px rgba(0, 0, 0, .82),
+        inset 0 1px 0 rgba(255, 255, 255, .12),
+        0 1px 2px rgba(0, 0, 0, .36),
+        0 0 12px rgba(32, 228, 124, .28) !important;
+      filter: brightness(.90);
+    }
+    .hardware-key.apf-physical-key.apf-long-ready {
+      border-color: #20E47C !important;
+      box-shadow:
+        inset 1px 1px 1px rgba(255, 255, 255, .38),
+        inset -2px -3px 5px rgba(0, 0, 0, .68),
+        0 0 18px rgba(32, 228, 124, .62) !important;
+    }
+    .hardware-key.apf-physical-key:focus-visible {
+      outline: 2px solid #20E47C !important;
+      outline-offset: 5px !important;
+    }
+    .hardware-key.apf-physical-key.key-up,
+    .hardware-key.apf-physical-key.key-down,
+    .hardware-key.apf-physical-key.key-ok {
+      left: 74.95% !important;
+    }
+    .hardware-key.apf-physical-key.key-up { top: 16.2% !important; }
+    .hardware-key.apf-physical-key.key-down { top: 35.9% !important; }
+    .hardware-key.apf-physical-key.key-ok { top: 54.9% !important; }
+    .hardware-key.apf-physical-key.key-power {
+      left: 29.25% !important;
+      top: 16.2% !important;
+    }
+    @media (prefers-color-scheme: light) {
+      .hardware-key.apf-physical-key .apf-key-label {
+        border-color: rgba(14, 45, 31, .15);
+        color: #183128;
+        background: rgba(247, 251, 249, .90) !important;
+        box-shadow: 0 3px 10px rgba(15, 31, 24, .18), inset 0 1px 0 rgba(255, 255, 255, .72);
+      }
+    }
     """
 }
 

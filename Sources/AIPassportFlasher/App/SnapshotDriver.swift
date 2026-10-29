@@ -110,7 +110,21 @@ enum SnapshotDriver {
             app.tab = .simulator
         }
         await sleep(16)
-        await capture(window: window, to: dir.appendingPathComponent("real-simulator.png"))
+        if let controller = SimulatorWebController.active {
+            await captureSimulator(
+                window: window,
+                controller: controller,
+                to: dir.appendingPathComponent("real-simulator.png")
+            )
+            await controller.captureDevice(to: dir.appendingPathComponent("real-simulator-buttons.png"))
+            log("captured real-simulator-buttons.png")
+            await controller.captureLongPressPreview(
+                to: dir.appendingPathComponent("real-simulator-buttons-long-press.png")
+            )
+            log("captured real-simulator-buttons-long-press.png")
+        } else {
+            await capture(window: window, to: dir.appendingPathComponent("real-simulator.png"))
+        }
 
         app.clearPlan()
         app.job = .idle
@@ -146,6 +160,37 @@ enum SnapshotDriver {
             do { try png.write(to: url); log("captured \(url.lastPathComponent)") }
             catch { log("write \(url.lastPathComponent) failed: \(error)") }
         }
+    }
+
+    private static func captureSimulator(
+        window: NSWindow,
+        controller: SimulatorWebController,
+        to url: URL
+    ) async {
+        guard let root = window.contentView, let webView = controller.webView else { return }
+        root.layoutSubtreeIfNeeded()
+        guard let base = root.bitmapImageRepForCachingDisplay(in: root.bounds),
+              let web = await controller.snapshotWebView() else { return }
+        root.cacheDisplay(in: root.bounds, to: base)
+
+        let converted = webView.convert(webView.bounds, to: root)
+        let webFrame = root.isFlipped
+            ? CGRect(
+                x: converted.minX,
+                y: root.bounds.height - converted.maxY,
+                width: converted.width,
+                height: converted.height
+            )
+            : converted
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: base)
+        web.draw(in: webFrame, from: .zero, operation: .sourceOver, fraction: 1)
+        NSGraphicsContext.current?.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let png = base.representation(using: .png, properties: [:]) else { return }
+        do { try png.write(to: url); log("captured \(url.lastPathComponent)") }
+        catch { log("write \(url.lastPathComponent) failed: \(error)") }
     }
 
     private static func shoot<V: View>(_ view: V, app: AppState, community: CommunityStore, size: CGSize, to dir: URL, name: String, settle: Double = 3.5) async {
