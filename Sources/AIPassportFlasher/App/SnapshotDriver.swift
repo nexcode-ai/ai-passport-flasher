@@ -118,10 +118,6 @@ enum SnapshotDriver {
             )
             await controller.captureDevice(to: dir.appendingPathComponent("real-simulator-buttons.png"))
             log("captured real-simulator-buttons.png")
-            await controller.captureLongPressPreview(
-                to: dir.appendingPathComponent("real-simulator-buttons-long-press.png")
-            )
-            log("captured real-simulator-buttons-long-press.png")
         } else {
             await capture(window: window, to: dir.appendingPathComponent("real-simulator.png"))
         }

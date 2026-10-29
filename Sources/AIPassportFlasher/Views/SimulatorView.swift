@@ -756,25 +756,6 @@ final class SimulatorWebController: ObservableObject {
         catch { FileHandle.standardError.write(Data("[snapshot] write \(url.lastPathComponent) failed: \(error)\n".utf8)) }
     }
 
-    func captureLongPressPreview(to url: URL) async {
-        guard let webView else { return }
-        let show = """
-        (() => {
-          const button = document.querySelector('.hardware-key[data-key="OK"]');
-          if (!button) return false;
-          button.classList.add('is-pressed', 'apf-holding');
-          const ring = button.querySelector('.apf-hold-ring rect');
-          if (ring) ring.style.strokeDashoffset = '0.28';
-          return true;
-        })()
-        """
-        _ = try? await webView.evaluateJavaScript(show)
-        await captureDevice(to: url)
-        _ = try? await webView.evaluateJavaScript(
-            "(() => { const b = document.querySelector('.hardware-key[data-key=\"OK\"]'); if (b) { b.classList.remove('is-pressed', 'apf-holding'); const r = b.querySelector('.apf-hold-ring rect'); if (r) r.style.strokeDashoffset = '1'; } })()"
-        )
-    }
-
     func snapshotWebView() async -> NSImage? {
         await snapshot(configuration: nil)
     }
@@ -1164,10 +1145,10 @@ enum SimulatorBridgeScript {
           shell.appendChild(content);
         }
         const keyVisuals = {
-          POWER: { icon: '⏻', title: '电源 · P · 长按 2 秒', hold: 2000 },
-          UP: { icon: '↑', title: '向上 · 键盘 ↑', hold: 0 },
-          DOWN: { icon: '↓', title: '向下 · 键盘 ↓', hold: 0 },
-          OK: { icon: '✓', title: '确认 · Return · 长按 0.5 秒', hold: 500 },
+          POWER: { title: '电源 · P · 长按 2 秒', hold: 2000 },
+          UP: { title: '向上 · 键盘 ↑', hold: 0 },
+          DOWN: { title: '向下 · 键盘 ↓', hold: 0 },
+          OK: { title: '确认 · Return · 长按 0.5 秒', hold: 500 },
         };
         const keyButtons = new Map();
         const activeHolds = new Map();
@@ -1224,10 +1205,7 @@ enum SimulatorBridgeScript {
 
           const face = document.createElement('span');
           face.className = 'apf-key-face';
-          const label = document.createElement('span');
-          label.className = 'apf-key-label';
-          label.textContent = visual.icon;
-          button.append(face, label);
+          button.append(face);
 
           if (visual.hold) {
             const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1332,81 +1310,51 @@ enum SimulatorTheme {
       pointer-events: none !important;
     }
     .hardware-key.apf-physical-key {
-      --apf-key-x: -50%;
-      width: clamp(28px, 4.5%, 34px) !important;
+      width: 3.9% !important;
       min-width: 28px !important;
-      height: clamp(40px, 7%, 48px) !important;
-      min-height: 40px !important;
+      height: 5.2% !important;
+      min-height: 28px !important;
       padding: 0 !important;
       overflow: visible !important;
       pointer-events: auto !important;
       appearance: none !important;
-      border: 1px solid rgba(239, 248, 245, .50) !important;
-      border-radius: 999px !important;
-      color: #F2F8F5 !important;
-      background:
-        linear-gradient(90deg, rgba(255, 255, 255, .32), rgba(255, 255, 255, .08) 28%, transparent 47%),
-        linear-gradient(155deg, rgba(102, 116, 116, .92), rgba(24, 31, 33, .98) 48%, rgba(7, 10, 12, .98)) !important;
-      box-shadow:
-        inset 1px 1px 1px rgba(255, 255, 255, .38),
-        inset -2px -3px 5px rgba(0, 0, 0, .72),
-        0 4px 8px rgba(0, 0, 0, .48),
-        0 0 0 3px rgba(225, 240, 235, .10) !important;
+      border: 1px solid transparent !important;
+      border-radius: 42% !important;
+      color: transparent !important;
+      background: transparent !important;
+      box-shadow: none !important;
       text-shadow: none !important;
-      transform: translateX(var(--apf-key-x)) translateY(0) scale(1) !important;
+      transform: translateY(0) scale(1) !important;
       transition:
         transform .10s cubic-bezier(.2, .8, .2, 1),
         border-color .15s ease,
-        box-shadow .15s ease,
-        filter .15s ease !important;
+        background .15s ease,
+        box-shadow .15s ease !important;
     }
     .hardware-key.apf-physical-key .apf-key-face {
       position: absolute;
-      inset: 4px 5px 5px;
+      inset: 1px;
       border-radius: inherit;
-      background: linear-gradient(180deg, rgba(255, 255, 255, .16), transparent 48%) !important;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16);
+      background: transparent !important;
+      box-shadow: none;
       pointer-events: none;
-    }
-    .hardware-key.apf-physical-key .apf-key-label {
-      position: absolute;
-      top: 50%;
-      right: calc(100% + 8px);
-      width: 28px;
-      height: 28px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, .16);
-      border-radius: 9px;
-      color: rgba(244, 249, 247, .94);
-      background: rgba(17, 22, 23, .78) !important;
-      box-shadow: 0 3px 10px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .08);
-      backdrop-filter: blur(9px);
-      font: 700 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
-      letter-spacing: 0 !important;
-      transform: translateY(-50%);
-      pointer-events: none;
-    }
-    .hardware-key.apf-physical-key.key-power .apf-key-label {
-      right: auto;
-      left: calc(100% + 8px);
-      font-size: 14px !important;
+      transition: background .15s ease, box-shadow .15s ease;
     }
     .hardware-key.apf-physical-key .apf-hold-ring {
       position: absolute;
-      inset: -5px;
-      width: calc(100% + 10px);
-      height: calc(100% + 10px);
+      inset: -3px;
+      width: calc(100% + 6px);
+      height: calc(100% + 6px);
       overflow: visible;
       opacity: 0;
       pointer-events: none;
-      filter: drop-shadow(0 0 4px rgba(32, 228, 124, .60));
+      filter: drop-shadow(0 0 2px rgba(32, 228, 124, .45));
       transition: opacity .12s ease;
     }
     .hardware-key.apf-physical-key .apf-hold-ring rect {
       fill: none;
       stroke: #20E47C;
-      stroke-width: 2;
+      stroke-width: 1.5;
       stroke-linecap: round;
       stroke-dasharray: 1;
       stroke-dashoffset: 1;
@@ -1418,55 +1366,44 @@ enum SimulatorTheme {
       opacity: 1;
     }
     .hardware-key.apf-physical-key:hover {
-      border-color: rgba(32, 228, 124, .92) !important;
-      filter: brightness(1.08);
+      border-color: rgba(32, 228, 124, .58) !important;
+      background: rgba(32, 228, 124, .055) !important;
       box-shadow:
-        inset 1px 1px 1px rgba(255, 255, 255, .44),
-        inset -2px -3px 5px rgba(0, 0, 0, .68),
-        0 4px 9px rgba(0, 0, 0, .48),
-        0 0 14px rgba(32, 228, 124, .34) !important;
+        inset 0 1px 0 rgba(255, 255, 255, .16),
+        0 0 8px rgba(32, 228, 124, .20) !important;
+    }
+    .hardware-key.apf-physical-key:hover .apf-key-face {
+      background: linear-gradient(90deg, rgba(255, 255, 255, .10), transparent 48%) !important;
     }
     .hardware-key.apf-physical-key:active,
     .hardware-key.apf-physical-key.is-pressed {
-      transform: translateX(var(--apf-key-x)) translateY(2px) scale(.92) !important;
-      border-color: rgba(32, 228, 124, .90) !important;
+      transform: translateY(1px) scale(.94) !important;
+      border-color: rgba(32, 228, 124, .72) !important;
+      background: rgba(7, 12, 10, .18) !important;
       box-shadow:
-        inset 2px 4px 8px rgba(0, 0, 0, .82),
-        inset 0 1px 0 rgba(255, 255, 255, .12),
-        0 1px 2px rgba(0, 0, 0, .36),
-        0 0 12px rgba(32, 228, 124, .28) !important;
-      filter: brightness(.90);
+        inset 0 2px 4px rgba(0, 0, 0, .38),
+        0 0 6px rgba(32, 228, 124, .16) !important;
     }
     .hardware-key.apf-physical-key.apf-long-ready {
-      border-color: #20E47C !important;
-      box-shadow:
-        inset 1px 1px 1px rgba(255, 255, 255, .38),
-        inset -2px -3px 5px rgba(0, 0, 0, .68),
-        0 0 18px rgba(32, 228, 124, .62) !important;
+      border-color: rgba(32, 228, 124, .78) !important;
+      box-shadow: 0 0 9px rgba(32, 228, 124, .30) !important;
     }
     .hardware-key.apf-physical-key:focus-visible {
       outline: 2px solid #20E47C !important;
-      outline-offset: 5px !important;
+      outline-offset: 2px !important;
     }
     .hardware-key.apf-physical-key.key-up,
     .hardware-key.apf-physical-key.key-down,
     .hardware-key.apf-physical-key.key-ok {
-      left: 74.95% !important;
+      left: 73% !important;
     }
-    .hardware-key.apf-physical-key.key-up { top: 16.2% !important; }
-    .hardware-key.apf-physical-key.key-down { top: 35.9% !important; }
-    .hardware-key.apf-physical-key.key-ok { top: 54.9% !important; }
+    .hardware-key.apf-physical-key.key-up { top: 17.1% !important; }
+    .hardware-key.apf-physical-key.key-down { top: 36.8% !important; }
+    .hardware-key.apf-physical-key.key-ok { top: 55.8% !important; }
     .hardware-key.apf-physical-key.key-power {
-      left: 29.25% !important;
-      top: 16.2% !important;
-    }
-    @media (prefers-color-scheme: light) {
-      .hardware-key.apf-physical-key .apf-key-label {
-        border-color: rgba(14, 45, 31, .15);
-        color: #183128;
-        background: rgba(247, 251, 249, .90) !important;
-        box-shadow: 0 3px 10px rgba(15, 31, 24, .18), inset 0 1px 0 rgba(255, 255, 255, .72);
-      }
+      left: 27.2% !important;
+      top: 17.1% !important;
+      width: 4.1% !important;
     }
     """
 }
