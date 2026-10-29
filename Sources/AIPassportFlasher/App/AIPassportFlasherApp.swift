@@ -29,7 +29,8 @@ enum Shared {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        ProcessInfo.processInfo.environment["APF_SNAPSHOT_DIR"] == nil
+        let env = ProcessInfo.processInfo.environment
+        return env["APF_SNAPSHOT_DIR"] == nil && env["APF_WINDOW_CAPTURE_DIR"] == nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -97,6 +98,10 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 DeviceStatusPill()
             }
+        }
+        .sheet(item: $app.detailPlay) { play in
+            PlayDetailView(play: play) { app.detailPlay = nil }
+                .environmentObject(app)
         }
     }
 

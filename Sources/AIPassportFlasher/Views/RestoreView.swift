@@ -48,7 +48,7 @@ struct RestoreView: View {
                         } label: {
                             Label("校验并继续", systemImage: "checkmark.shield")
                         }
-                        .buttonStyle(PrimaryButtonStyle(size: .large))
+                        .buttonStyle(.app(.primary, size: .large))
                         .disabled(working || app.job.isRunning || (useManual ? manualSN.isEmpty || manualKey.isEmpty : link.isEmpty))
                         if working { ProgressView(value: fraction).frame(width: 220) }
                     }
@@ -63,6 +63,7 @@ struct RestoreView: View {
             .padding(.vertical, 28)
             .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .overlayScrollers()
         }
         .background(AppTheme.pageBackground)
     }
@@ -160,14 +161,19 @@ struct AboutView: View {
                 }
                 StepCard(number: "", title: "许可") {
                     Text("esptool 以 GPL-2.0-or-later 许可发布，其许可证随应用一并提供（Resources/esptool/LICENSE）。").font(.callout)
-                    Text("玩法模拟器基于 VOID001/FoloToy-Passport-Simulator（MIT）及 ESP-EMU，许可证随应用一并提供（Resources/simulator/LICENSE）。")
-                        .font(.callout)
+                    HStack(spacing: 4) {
+                        Text("玩法模拟器基于")
+                        Link("VOID001/FoloToy-Passport-Simulator", destination: URL(string: "https://github.com/VOID001/FoloToy-Passport-Simulator")!)
+                        Text("（MIT）及 ESP-EMU，许可证随应用一并提供（Resources/simulator/LICENSE）。")
+                    }
+                    .font(.callout)
                 }
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 28)
             .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .overlayScrollers()
         }
         .background(AppTheme.pageBackground)
         .task { esptoolVersion = await readVersion() }

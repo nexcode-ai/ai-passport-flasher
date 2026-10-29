@@ -172,7 +172,9 @@ async function start(firmware, debugEnabled = false) {
   emulator.load_firmware(new Uint8Array(firmware));
   reportProgress(95, "正在连接虚拟外设", "启动显示、音频与网络桥接");
   network = new EmulatorNetworkBridge(emulator, {
-    url: "ws://127.0.0.1:4190/api/emulator-network",
+    url: self.location.protocol.startsWith("http")
+      ? `${self.location.protocol === "https:" ? "wss:" : "ws:"}//${self.location.host}/api/emulator-network`
+      : "ws://127.0.0.1:__APF_BRIDGE_PORT__/api/emulator-network",
     onStatus: (detail) => postMessage({ type: "network-status", detail }),
     onEvent: (detail) => postMessage({ type: "network-event", detail }),
   });

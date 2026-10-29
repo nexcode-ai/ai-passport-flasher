@@ -21,10 +21,7 @@ struct CommunityView: View {
         }
         .background(AppTheme.pageBackground)
         .onAppear { store.start() }
-        .sheet(item: $app.detailPlay) { play in
-            PlayDetailView(play: play) { app.detailPlay = nil }
-                .environmentObject(app)
-        }
+        .overlayScrollers()
     }
 
     private var header: some View {
@@ -41,10 +38,8 @@ struct CommunityView: View {
                 app.tab = .flash
             } label: {
                 Label("安装本地 .bin 固件", systemImage: "doc.badge.arrow.up")
-                    .padding(.horizontal, 4)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.app(.secondary, size: .large))
             .help("已有 .bin 文件？从电脑选择并刷入")
         }
     }
@@ -57,7 +52,10 @@ struct CommunityView: View {
                 Text("FoloToy 官方推荐").foregroundStyle(.secondary).font(.callout)
                 Spacer()
                 if store.featuredError != nil {
-                    Button("重新加载") { store.loadFeatured() }
+                    Button { store.loadFeatured() } label: {
+                        Label("重新加载", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.app(.tertiary, size: .small))
                 }
             }
             if let err = store.featuredError {
@@ -70,8 +68,10 @@ struct CommunityView: View {
                         Text(err).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer()
-                    Button("重新加载") { store.loadFeatured() }
-                        .buttonStyle(SoftButtonStyle())
+                    Button { store.loadFeatured() } label: {
+                        Label("重新加载", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.app(.secondary))
                 }
                 .padding(18)
                 .card()
@@ -118,8 +118,10 @@ struct CommunityView: View {
                     Text("请检查网络连接后重试。已经下载的固件不会受到影响。")
                         .font(.callout).foregroundStyle(.secondary)
                     Text(err).font(.caption).foregroundStyle(.tertiary).lineLimit(2)
-                    Button("重新连接") { store.reload() }
-                        .buttonStyle(PrimaryButtonStyle())
+                    Button { store.reload() } label: {
+                        Label("重新连接", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.app(.primary))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 34)
@@ -152,7 +154,10 @@ struct CommunityView: View {
                     ProgressView().controlSize(.small)
                     Text("正在加载…").foregroundStyle(.secondary)
                 } else if store.hasMore {
-                    Button("加载更多") { store.loadMore() }
+                    Button { store.loadMore() } label: {
+                        Label("加载更多", systemImage: "arrow.down")
+                    }
+                    .buttonStyle(.app(.tertiary, size: .small))
                 } else if !store.plays.isEmpty {
                     Text("已显示全部 \(store.plays.count) 个玩法").foregroundStyle(.secondary)
                 }
@@ -250,7 +255,7 @@ struct InstallButton: View {
             }
             .frame(minWidth: compact ? 0 : 92)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.app(.primary, size: compact ? .small : .regular))
         .disabled(!play.isInstallable || app.downloadingPlayID != nil || app.job.isRunning)
         .help(play.isInstallable ? "下载并校验固件（\(sizeText)），然后进入连接与安装步骤" : "该玩法暂未提供可安装的合并固件")
     }
@@ -311,16 +316,16 @@ struct HeroFeaturedCard: View {
                 Spacer(minLength: 4)
                 HStack(spacing: 10) {
                     Button {
-                        app.simulatorPlayID = play.id
-                        app.tab = .simulator
+                        SimulatorSession.shared.tryPlay(play, app: app)
                     } label: {
                         Label("先试用", systemImage: "gamecontroller")
                     }
-                    .buttonStyle(SoftButtonStyle())
-                    Button("查看详情", action: onDetail)
-                        .buttonStyle(SoftButtonStyle())
+                    .buttonStyle(.app(.secondary))
+                    Button(action: onDetail) {
+                        Label("查看详情", systemImage: "info.circle")
+                    }
+                    .buttonStyle(.app(.tertiary))
                     InstallButton(play: play)
-                        .buttonStyle(PrimaryButtonStyle())
                 }
             }
             .padding(26)
@@ -401,21 +406,11 @@ struct PlayCard: View {
                 HStack(spacing: 12) {
                     Stats(play: play)
                     Spacer()
-                    Button {
-                        app.simulatorPlayID = play.id
-                        app.tab = .simulator
-                    } label: {
-                        Image(systemName: "gamecontroller")
+                    IconButton(symbol: "gamecontroller", help: "先在模拟器中体验", size: .small) {
+                        SimulatorSession.shared.tryPlay(play, app: app)
                     }
-                    .buttonStyle(.borderless)
-                    .help("先在模拟器中体验")
-                    Button(action: onDetail) {
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("查看详情")
+                    IconButton(symbol: "arrow.up.right", help: "查看详情", size: .small, action: onDetail)
                     InstallButton(play: play)
-                        .controlSize(.small)
                 }
             }
             .padding(15)
@@ -447,9 +442,12 @@ struct FeaturedCard: View {
             Text(play.description?.display ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 .frame(height: 30, alignment: .top)
             HStack {
-                Button("详情", action: onDetail).controlSize(.small)
+                Button(action: onDetail) {
+                    Label("详情", systemImage: "info.circle")
+                }
+                .buttonStyle(.app(.tertiary, size: .small))
                 Spacer()
-                InstallButton(play: play, compact: true).controlSize(.small)
+                InstallButton(play: play, compact: true)
             }
         }
         .frame(width: 214)
@@ -519,7 +517,10 @@ struct PlayDetailView: View {
                     Text("先确认玩法信息，再连接设备完成安装").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("关闭", action: close)
+                Button(action: close) {
+                    Label("关闭", systemImage: "xmark")
+                }
+                    .buttonStyle(.app(.tertiary, size: .small))
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 22)
@@ -553,6 +554,7 @@ struct PlayDetailView: View {
                 VStack(spacing: 0) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
+                            JourneyStrip(step: .install)
                             HStack(spacing: 0) {
                                 GuideStepBadge(number: 1, title: "选择玩法", complete: true, active: false)
                                 GuideConnector(complete: true)
@@ -612,12 +614,11 @@ struct PlayDetailView: View {
                         Link("在网页中查看", destination: play.pageURL)
                         Button {
                             close()
-                            app.simulatorPlayID = play.id
-                            app.tab = .simulator
+                            SimulatorSession.shared.tryPlay(play, app: app)
                         } label: {
                             Label("先在模拟器中体验", systemImage: "gamecontroller")
                         }
-                        .buttonStyle(SoftButtonStyle())
+                        .buttonStyle(.app(.secondary))
                         Spacer()
                         if app.downloadingPlayID == play.id {
                             VStack(alignment: .trailing, spacing: 4) {
@@ -631,7 +632,7 @@ struct PlayDetailView: View {
                             } label: {
                                 Label("下载并继续", systemImage: "arrow.down.circle.fill")
                             }
-                            .buttonStyle(PrimaryButtonStyle(size: .large))
+                            .buttonStyle(.app(.primary, size: .large))
                             .keyboardShortcut(.defaultAction)
                             .disabled(!play.isInstallable || app.downloadingPlayID != nil || app.job.isRunning)
                         }
@@ -645,6 +646,45 @@ struct PlayDetailView: View {
         .frame(width: 900, height: 680)
         .background(Brand.surface)
         .onChange(of: app.tab) { _, tab in if tab == .flash { close() } }
+    }
+}
+
+enum JourneyStep: Int {
+    case discover, tryOut, install
+}
+
+struct JourneyStrip: View {
+    let step: JourneyStep
+    private let steps: [(String, String)] = [
+        ("square.grid.2x2", "发现玩法"),
+        ("gamecontroller", "先试用"),
+        ("arrow.down.circle", "安装到设备"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, item in
+                let active = index == step.rawValue
+                let complete = index < step.rawValue
+                HStack(spacing: 4) {
+                    Image(systemName: complete ? "checkmark.circle.fill" : item.0)
+                    Text(item.1)
+                }
+                .font(.system(size: 10.5, weight: active ? .semibold : .medium))
+                .foregroundStyle(active || complete ? Brand.accent : Color.secondary)
+                .lineLimit(1)
+                if index < steps.count - 1 {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(Brand.surfaceSunken, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("发现玩法、先试用、安装到设备")
     }
 }
 

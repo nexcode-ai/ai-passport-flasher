@@ -39,6 +39,7 @@ struct FlashView: View {
             .padding(.vertical, 28)
             .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .overlayScrollers()
         }
         .background(AppTheme.pageBackground)
         .confirmationDialog("确认写入固件？", isPresented: $confirmFlash, titleVisibility: .visible) {
@@ -115,7 +116,7 @@ struct InstallSuccessView: View {
                 } label: {
                     Label("发现更多玩法", systemImage: "sparkles")
                 }
-                .buttonStyle(PrimaryButtonStyle(size: .large))
+                .buttonStyle(.app(.primary, size: .large))
 
                 Button {
                     app.clearPlan()
@@ -123,7 +124,7 @@ struct InstallSuccessView: View {
                 } label: {
                     Label("恢复出厂固件", systemImage: "arrow.counterclockwise")
                 }
-                .buttonStyle(SoftButtonStyle())
+                .buttonStyle(.app(.secondary, size: .large))
             }
         }
         .padding(.vertical, 44)
@@ -481,12 +482,9 @@ struct WriteStep: View {
                     confirmFlash = true
                 } label: {
                     Label(app.job.isRunning ? "正在写入…" : "开始写入", systemImage: "bolt.fill")
-                        .font(.headline)
                         .frame(minWidth: 190)
-                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.app(.primary, size: .large))
                 .disabled(!app.blockers.isEmpty || app.job.isRunning)
                 if app.job.isRunning {
                     Button("取消", role: .cancel) { app.cancelJob() }
@@ -574,6 +572,7 @@ struct LogView: View {
                         }
                     }
                     .padding(10)
+                    .overlayScrollers()
                 }
                 .frame(height: 220)
                 .background(Color(nsColor: .textBackgroundColor).opacity(0.62), in: RoundedRectangle(cornerRadius: 11, style: .continuous))

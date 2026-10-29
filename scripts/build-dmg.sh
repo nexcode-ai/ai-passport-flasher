@@ -11,7 +11,7 @@ trap 'rm -rf "$STAGING"' EXIT
 "$ROOT/scripts/build-app.sh"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-DMG="$DIST/AIPassportFlasher-${VERSION}-arm64.dmg"
+DMG="$DIST/AIPassportFlasher-${VERSION}-universal.dmg"
 mkdir -p "$DIST"
 rm -f "$DMG"
 
