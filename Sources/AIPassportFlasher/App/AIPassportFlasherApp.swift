@@ -13,6 +13,7 @@ struct AIPassportFlasherApp: App {
                 .environmentObject(app)
                 .environmentObject(community)
                 .frame(minWidth: 1020, minHeight: 700)
+                .tint(AppTheme.accent)
         }
         .defaultSize(width: 1240, height: 860)
         .commands { CommandGroup(replacing: .newItem) {} }
@@ -42,13 +43,44 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: Binding(get: { app.tab }, set: { if let t = $0 { app.tab = t } })) {
-                ForEach(SidebarTab.allCases) { tab in
-                    Label(tab.title, systemImage: tab.symbol).tag(tab)
+            VStack(spacing: 0) {
+                HStack(spacing: 11) {
+                    Image(systemName: "sparkles.rectangle.stack.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(AppTheme.accent.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .shadow(color: AppTheme.accent.opacity(0.22), radius: 8, y: 3)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("AI Passport").font(.headline)
+                        Text("刷机工具").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
+
+                List(selection: Binding(get: { app.tab }, set: { if let t = $0 { app.tab = t } })) {
+                    ForEach(SidebarTab.allCases) { tab in
+                        HStack(spacing: 11) {
+                            Image(systemName: tab.symbol)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(app.tab == tab ? AppTheme.accent : .secondary)
+                                .frame(width: 24, height: 24)
+                            Text(tab.title).font(.callout.weight(app.tab == tab ? .semibold : .medium))
+                            Spacer()
+                        }
+                        .padding(.vertical, 5)
+                        .tag(tab)
+                    }
+                }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                sidebarFooter
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
-            .safeAreaInset(edge: .bottom) { sidebarFooter }
+            .background(.ultraThinMaterial)
+            .navigationSplitViewColumnWidth(min: 210, ideal: 220)
         } detail: {
             Group {
                 switch app.tab {
@@ -63,18 +95,21 @@ struct ContentView: View {
     }
 
     private var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             if let port = app.selectedPort {
                 Label((port.path as NSString).lastPathComponent, systemImage: "cable.connector")
-                    .font(.caption).foregroundStyle(.green)
+                    .font(.caption.weight(.medium)).foregroundStyle(.green)
             } else {
-                Label("未连接设备", systemImage: "cable.connector.slash").font(.caption).foregroundStyle(.secondary)
+                Label("未连接设备", systemImage: "cable.connector.slash")
+                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             }
             if app.job.isRunning {
                 ProgressView(value: app.progress).controlSize(.small)
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(12)
     }
 }

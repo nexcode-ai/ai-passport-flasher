@@ -6,7 +6,7 @@ struct CommunityView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 30) {
                 header
                 if let err = app.downloadError {
                     Banner(kind: .error, text: err) { app.downloadError = nil }
@@ -14,11 +14,12 @@ struct CommunityView: View {
                 featuredSection
                 librarySection
             }
-            .padding(24)
-            .frame(maxWidth: 1240, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1320, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.pageBackground)
         .onAppear { store.start() }
         .sheet(item: $app.detailPlay) { play in
             PlayDetailView(play: play) { app.detailPlay = nil }
@@ -27,30 +28,33 @@ struct CommunityView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("玩法社区").font(.largeTitle.bold())
-                Text("挑一个喜欢的玩法，点击「安装」下载固件，再连接 AI Passport 写入。安装会覆盖设备当前的全部内容。")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        HStack(alignment: .center, spacing: 20) {
+            PageHeader(
+                eyebrow: "探索与发现",
+                title: "玩法社区",
+                subtitle: "发现社区创作的有趣玩法，一键下载并安装到你的 AI Passport。",
+                symbol: "square.grid.2x2.fill"
+            )
             Spacer()
             Button {
                 app.clearPlan()
                 app.tab = .flash
             } label: {
                 Label("安装本地 .bin 固件", systemImage: "doc.badge.arrow.up")
+                    .padding(.horizontal, 4)
             }
+            .buttonStyle(.bordered)
             .controlSize(.large)
             .help("已有 .bin 文件？从电脑选择并刷入")
         }
     }
 
     private var featuredSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("官方精选").font(.title2.bold())
-                Text("由 FoloToy 官方从社区中挑选").foregroundStyle(.secondary).font(.callout)
+                Label("官方精选", systemImage: "sparkles")
+                    .font(.title2.bold())
+                Text("FoloToy 官方推荐").foregroundStyle(.secondary).font(.callout)
                 Spacer()
                 if store.featuredError != nil {
                     Button("重新加载") { store.loadFeatured() }
@@ -59,26 +63,30 @@ struct CommunityView: View {
             if let err = store.featuredError {
                 Text(err).foregroundStyle(.red).font(.callout)
             } else if store.featured.isEmpty {
-                HStack(spacing: 14) { ForEach(0..<5, id: \.self) { _ in FeaturedCardSkeleton() } }
+                HStack(spacing: 16) { ForEach(0..<5, id: \.self) { _ in FeaturedCardSkeleton() } }
             } else {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    LazyHStack(alignment: .top, spacing: 14) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 16) {
                         ForEach(store.featured) { play in
                             FeaturedCard(play: play, onDetail: { app.detailPlay = play })
                         }
                     }
-                    .padding(.bottom, 10)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 2)
                 }
             }
         }
     }
 
     private var librarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                Text("全部玩法").font(.title2.bold())
+                Label("全部玩法", systemImage: "rectangle.grid.2x2")
+                    .font(.title2.bold())
                 if store.total > 0 {
-                    Text("共 \(store.total) 个").foregroundStyle(.secondary)
+                    Text("\(store.total) 个作品")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
@@ -89,10 +97,18 @@ struct CommunityView: View {
                     Button("重试") { store.reload() }
                 }
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 400, maximum: 620), spacing: 14)], spacing: 14) {
-                ForEach(store.plays) { play in
-                    PlayCard(play: play, onDetail: { app.detailPlay = play })
-                        .onAppear { if play.id == store.plays.last?.id { store.loadMore() } }
+            if store.loading && store.plays.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 18)], spacing: 18) {
+                    ForEach(0..<6, id: \.self) { _ in PlayCardSkeleton() }
+                }
+            } else if store.plays.isEmpty && store.error == nil {
+                EmptyState(symbol: "sparkle.magnifyingglass", title: "没有找到相关玩法", message: "试试更换关键词或选择其他分类")
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 18)], spacing: 18) {
+                    ForEach(store.plays) { play in
+                        PlayCard(play: play, onDetail: { app.detailPlay = play })
+                            .onAppear { if play.id == store.plays.last?.id { store.loadMore() } }
+                    }
                 }
             }
             HStack {
@@ -104,8 +120,6 @@ struct CommunityView: View {
                     Button("加载更多") { store.loadMore() }
                 } else if !store.plays.isEmpty {
                     Text("已显示全部 \(store.plays.count) 个玩法").foregroundStyle(.secondary)
-                } else if store.error == nil {
-                    Text("没有找到符合条件的玩法").foregroundStyle(.secondary)
                 }
                 Spacer()
             }
@@ -114,10 +128,12 @@ struct CommunityView: View {
     }
 
     private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
                 HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
                     TextField("搜索玩法名称、作者或简介", text: $store.query.search)
                         .textFieldStyle(.plain)
                     if !store.query.search.isEmpty {
@@ -125,10 +141,10 @@ struct CommunityView: View {
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-                .frame(maxWidth: 380)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.secondary.opacity(0.18)))
+                .frame(maxWidth: 440)
 
                 Picker("标签", selection: $store.query.tag) {
                     ForEach(PlayCatalog.tags, id: \.key) { Text($0.title).tag($0.key) }
@@ -151,9 +167,9 @@ struct CommunityView: View {
                 }
             }
         }
+        .modernCard(padding: 16)
     }
 }
-
 // MARK: - Cards
 
 struct CoverImage: View {
@@ -177,7 +193,6 @@ struct CoverImage: View {
         }
     }
 }
-
 struct InstallButton: View {
     @EnvironmentObject var app: AppState
     let play: Play
@@ -212,58 +227,80 @@ struct InstallButton: View {
 struct PlayCard: View {
     let play: Play
     let onDetail: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             CoverImage(url: play.thumbnailURL)
-                .frame(width: 126, height: 168)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(maxWidth: .infinity)
+                .frame(height: 178)
+                .clipped()
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 6) {
+                        Tag(text: play.categoryLabel, tint: .white, onDark: true)
+                        if play.mustPlay == true { Tag(text: "必玩", tint: .white, onDark: true) }
+                    }
+                    .padding(12)
+                }
+                .overlay {
+                    LinearGradient(colors: [.clear, .black.opacity(0.13)], startPoint: .center, endPoint: .bottom)
+                }
                 .onTapGesture(perform: onDetail)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Tag(text: play.categoryLabel)
-                    if play.mustPlay == true { Tag(text: "必玩", tint: .orange) }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(play.title.display)
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
                     Spacer()
                     if let d = play.updatedDate {
-                        Text(d, format: .dateTime.year().month().day()).font(.caption).foregroundStyle(.secondary)
+                        Text(d, format: .dateTime.month().day())
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                     }
                 }
-                Text(play.title.display).font(.headline).lineLimit(2)
                 Text("开发者 \(play.author ?? "—")").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                Text(play.description?.display ?? "").font(.callout).foregroundStyle(.secondary).lineLimit(3)
-                if let ins = play.instructions?.display, !ins.isEmpty {
-                    Label { Text(ins).lineLimit(2) } icon: { Image(systemName: "hand.point.up.left") }
-                        .font(.caption).foregroundStyle(.secondary)
-                        .help(ins)
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 10) {
+                Text(play.description?.display ?? "")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(height: 38, alignment: .top)
+                HStack(spacing: 12) {
                     Stats(play: play)
                     Spacer()
-                    Button("详情", action: onDetail)
+                    Button(action: onDetail) {
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("查看详情")
                     InstallButton(play: play)
+                        .controlSize(.small)
                 }
             }
+            .padding(15)
         }
-        .padding(12)
-        .frame(minHeight: 192)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.secondary.opacity(0.18)))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.secondary.opacity(hovering ? 0.28 : 0.13)))
+        .shadow(color: .black.opacity(hovering ? 0.15 : 0.07), radius: hovering ? 18 : 9, y: hovering ? 9 : 4)
+        .scaleEffect(hovering ? 1.012 : 1)
+        .animation(.easeOut(duration: 0.18), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 
 struct FeaturedCard: View {
     let play: Play
     let onDetail: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 9) {
             CoverImage(url: play.thumbnailURL)
-                .frame(width: 186, height: 248)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(alignment: .topLeading) { Tag(text: play.categoryLabel, tint: .white, onDark: true).padding(8) }
+                .frame(width: 214, height: 268)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(alignment: .topLeading) { Tag(text: play.categoryLabel, tint: .white, onDark: true).padding(10) }
                 .onTapGesture(perform: onDetail)
-            Text(play.title.display).font(.headline).lineLimit(1)
+            Text(play.title.display).font(.headline.weight(.semibold)).lineLimit(1)
             Text("开发者 \(play.author ?? "—")").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Text(play.description?.display ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 .frame(height: 30, alignment: .top)
@@ -273,17 +310,39 @@ struct FeaturedCard: View {
                 InstallButton(play: play, compact: true).controlSize(.small)
             }
         }
-        .frame(width: 186)
+        .frame(width: 214)
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.secondary.opacity(hovering ? 0.27 : 0.12)))
+        .shadow(color: .black.opacity(hovering ? 0.13 : 0.06), radius: hovering ? 17 : 8, y: hovering ? 8 : 4)
+        .offset(y: hovering ? -3 : 0)
+        .animation(.easeOut(duration: 0.18), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 
 struct FeaturedCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)).frame(width: 186, height: 248)
+            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)).frame(width: 214, height: 268)
             RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)).frame(width: 120, height: 12)
             RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.10)).frame(width: 80, height: 10)
         }
+        .padding(10)
+        .modernCard(padding: 0)
+    }
+}
+
+struct PlayCardSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.11)).frame(height: 178)
+            RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.13)).frame(width: 150, height: 14)
+            RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.09)).frame(height: 11)
+            RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.09)).frame(width: 190, height: 11)
+        }
+        .padding(12)
+        .modernCard(padding: 0)
     }
 }
 
@@ -298,35 +357,6 @@ struct Stats: View {
             }
         }
         .font(.caption).foregroundStyle(.secondary).labelStyle(.titleAndIcon)
-    }
-}
-
-struct Tag: View {
-    let text: String
-    var tint: Color = .accentColor
-    var onDark = false
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 7).padding(.vertical, 3)
-            .foregroundStyle(onDark ? Color.white : tint)
-            .background(Capsule().fill(onDark ? Color.black.opacity(0.55) : tint.opacity(0.14)))
-    }
-}
-
-struct Chip: View {
-    let title: String
-    let selected: Bool
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.callout)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -361,7 +391,7 @@ struct PlayDetailView: View {
                         .font(.caption.monospaced()).foregroundStyle(.secondary)
                     }
                 }
-                .padding(24)
+                .padding(28)
                 if !play.galleryURLs.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: 10) {
@@ -382,10 +412,12 @@ struct PlayDetailView: View {
                 Button("关闭", action: close).keyboardShortcut(.cancelAction)
                 InstallButton(play: play)
             }
-            .padding(16)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 16)
+            .background(.thinMaterial)
         }
         .frame(width: 760, height: 620)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.pageBackground)
         .onChange(of: app.tab) { _, tab in if tab == .flash { close() } }
     }
 
@@ -396,34 +428,6 @@ struct PlayDetailView: View {
                 Text(title).font(.headline)
                 Text(t).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
-        }
-    }
-}
-
-struct Banner: View {
-    enum Kind { case error, warning, info }
-    let kind: Kind
-    let text: String
-    var onClose: (() -> Void)?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: kind == .info ? "info.circle.fill" : "exclamationmark.triangle.fill")
-            Text(text).fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            if let onClose { Button { onClose() } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }
-        }
-        .padding(12)
-        .foregroundStyle(color)
-        .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.35)))
-    }
-
-    private var color: Color {
-        switch kind {
-        case .error: return .red
-        case .warning: return .orange
-        case .info: return .blue
         }
     }
 }

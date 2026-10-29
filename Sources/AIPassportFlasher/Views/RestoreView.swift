@@ -14,12 +14,13 @@ struct RestoreView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("恢复出厂固件").font(.largeTitle.bold())
-                    Text("刷过其他玩法后，可在这里恢复 AI Passport 默认固件，并写回这台设备的身份凭据（SN / KEY），之后即可继续使用小程序的通行证功能。")
-                        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    eyebrow: "安全恢复",
+                    title: "恢复出厂固件",
+                    subtitle: "恢复 AI Passport 默认系统与设备凭据，重新使用小程序的通行证功能。",
+                    symbol: "arrow.counterclockwise.circle.fill"
+                )
                 StepCard(number: "01", title: "获取设备专属链接",
                          subtitle: "用手机扫描设备背面的二维码，打开设备专属页面，点击「复制设备链接到电脑」，通过私密方式发到这台电脑，然后粘贴到下面。") {
                     Picker("", selection: $useManual) {
@@ -57,11 +58,12 @@ struct RestoreView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 980, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.pageBackground)
     }
 
     private func prepare() {
@@ -111,8 +113,13 @@ struct AboutView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("关于").font(.largeTitle.bold())
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    eyebrow: "应用信息",
+                    title: "关于",
+                    subtitle: "AI Passport 刷机工具的版本、数据来源与开源组件信息。",
+                    symbol: "info.circle.fill"
+                )
                 StepCard(number: "", title: "AI Passport 刷机工具（macOS）") {
                     InfoPair(label: "应用版本", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
                     InfoPair(label: "目标设备", value: "FoloToy AI Passport · ESP32-C3 · 8 MB Flash · USB Serial/JTAG")
@@ -131,11 +138,12 @@ struct AboutView: View {
                     Text("esptool 以 GPL-2.0-or-later 许可发布，其许可证随应用一并提供（Resources/esptool/LICENSE）。").font(.callout)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 980, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.pageBackground)
         .task { esptoolVersion = await readVersion() }
     }
 

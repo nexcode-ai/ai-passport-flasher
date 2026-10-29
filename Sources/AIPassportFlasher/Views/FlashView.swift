@@ -14,22 +14,24 @@ struct FlashView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("连接与安装").font(.largeTitle.bold())
-                    Text("用支持数据传输的 Type-C 线连接 AI Passport 并开机，选择串口和固件后写入。写入完成后设备会自动重启。")
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    eyebrow: "三步完成",
+                    title: "连接与安装",
+                    subtitle: "连接设备、选择固件，然后安全写入。完成后 AI Passport 会自动重启。",
+                    symbol: "cable.connector"
+                )
                 StepIndicator(current: currentStep, done: app.job == .succeeded)
                 ConnectStep()
                 FirmwareStep()
                 WriteStep(confirmFlash: $confirmFlash)
             }
-            .padding(24)
-            .frame(maxWidth: 980, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.pageBackground)
         .confirmationDialog("确认写入固件？", isPresented: $confirmFlash, titleVisibility: .visible) {
             Button("开始写入（覆盖设备内容）", role: .destructive) { app.startFlash() }
             Button("取消", role: .cancel) {}
@@ -49,47 +51,35 @@ struct StepIndicator: View {
             ForEach(0..<3, id: \.self) { i in
                 let n = i + 1
                 let complete = done || n < current
-                HStack(spacing: 8) {
+                VStack(spacing: 7) {
                     ZStack {
-                        Circle().fill(complete ? Color.green : (n == current ? Color.accentColor : Color.secondary.opacity(0.2)))
-                        if complete { Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white) }
-                        else { Text(String(format: "%02d", n)).font(.caption.bold()).foregroundStyle(n == current ? .white : .secondary) }
+                        Circle()
+                            .fill(complete ? Color.green : (n == current ? AppTheme.accent : Color.secondary.opacity(0.12)))
+                        if complete {
+                            Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white)
+                        } else {
+                            Image(systemName: ["cable.connector", "shippingbox", "bolt.fill"][i])
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(n == current ? .white : .secondary)
+                        }
                     }
-                    .frame(width: 28, height: 28)
-                    Text(titles[i]).fontWeight(n == current ? .semibold : .regular)
+                    .frame(width: 34, height: 34)
+                    .shadow(color: n == current ? AppTheme.accent.opacity(0.24) : .clear, radius: 7, y: 3)
+                    Text(titles[i]).font(.caption.weight(n == current ? .semibold : .medium))
                         .foregroundStyle(n <= current || done ? .primary : .secondary)
                 }
+                .frame(width: 120)
                 if i < 2 {
-                    Rectangle().fill(Color.secondary.opacity(0.25)).frame(height: 1).padding(.horizontal, 12)
+                    Rectangle()
+                        .fill((complete ? Color.green : Color.secondary.opacity(0.18)))
+                        .frame(height: 2)
+                        .padding(.horizontal, 8)
+                        .offset(y: -10)
                 }
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
-    }
-}
-
-struct StepCard<Content: View>: View {
-    let number: String
-    let title: String
-    var subtitle: String?
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if !number.isEmpty {
-                    Text(number).font(.title3.monospacedDigit().bold()).foregroundStyle(Color.accentColor)
-                }
-                Text(title).font(.title3.bold())
-            }
-            if let subtitle { Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
-            content
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.secondary.opacity(0.18)))
+        .frame(maxWidth: .infinity)
+        .modernCard(padding: 16)
     }
 }
 
@@ -102,12 +92,26 @@ struct ConnectStep: View {
         StepCard(number: "01", title: "连接设备",
                  subtitle: "串口每 1.5 秒自动刷新。AI Passport 在 macOS 上显示为 /dev/cu.usbmodem…（USB JTAG/serial debug unit）。") {
             if app.ports.isEmpty {
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text("等待设备…未检测到 usbmodem 串口。请确认设备已开机，并使用可传输数据的线缆。")
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(AppTheme.accent.opacity(0.09))
+                        Image(systemName: "cable.connector.slash")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                    .frame(width: 44, height: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 7) {
+                            Text("正在等待设备").font(.callout.weight(.semibold))
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text("请确认设备已开机，并使用支持数据传输的 Type-C 线。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
-                .padding(.vertical, 6)
+                .padding(14)
+                .background(AppTheme.accent.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 VStack(spacing: 6) {
                     ForEach(app.ports) { port in
@@ -156,20 +160,10 @@ struct PortRow: View {
             }
             .padding(10)
             .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Color.accentColor.opacity(0.1) : Color.clear))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? AppTheme.accent.opacity(0.09) : Color.secondary.opacity(0.035)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(selected ? AppTheme.accent.opacity(0.28) : Color.clear))
         }
         .buttonStyle(.plain)
-    }
-}
-
-struct InfoPair: View {
-    let label: String
-    let value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.callout.monospaced()).textSelection(.enabled)
-        }
     }
 }
 
@@ -234,9 +228,10 @@ struct FirmwareStep: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
+            .background(AppTheme.accent.opacity(dropTargeted ? 0.08 : 0.025), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
                 .foregroundStyle(dropTargeted ? Color.accentColor : Color.secondary.opacity(0.35)))
             .onDrop(of: [.fileURL], isTargeted: $dropTargeted, perform: handleDrop)
             Text("也可以把 .bin 文件拖到上面的虚线框中。").font(.caption).foregroundStyle(.secondary)
@@ -338,7 +333,8 @@ struct ImageTable: View {
                 .padding(.horizontal, 8).padding(.vertical, 5)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.55), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.secondary.opacity(0.12)))
         .disabled(app.job.isRunning)
     }
 }
@@ -351,7 +347,7 @@ struct WriteStep: View {
 
     var body: some View {
         StepCard(number: "03", title: "写入与重启") {
-            Banner(kind: .warning, text: "刷写会覆盖设备 Flash 中对应区域的现有内容（包括当前玩法和已保存的数据）。安装社区玩法后，若要再次使用小程序的通行证功能，需要先「恢复出厂固件」。写入过程中请勿拔线或退出本程序。")
+            Banner(kind: .warning, text: "写入会替换设备中的现有玩法和相关数据。之后可随时通过「恢复出厂固件」回到默认状态；写入期间请保持连接。")
             HStack(spacing: 18) {
                 Picker("波特率", selection: $app.baud) {
                     ForEach(app.baudOptions, id: \.self) { Text("\($0)").tag($0) }
@@ -367,12 +363,16 @@ struct WriteStep: View {
             }
             .toggleStyle(.checkbox)
             .disabled(app.job.isRunning)
+            .padding(.vertical, 2)
 
             HStack(spacing: 12) {
                 Button {
                     confirmFlash = true
                 } label: {
-                    Label(app.job.isRunning ? "正在写入…" : "开始写入", systemImage: "bolt.fill").frame(minWidth: 120)
+                    Label(app.job.isRunning ? "正在写入…" : "开始写入", systemImage: "bolt.fill")
+                        .font(.headline)
+                        .frame(minWidth: 190)
+                        .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -393,6 +393,8 @@ struct WriteStep: View {
                 }
                 ProgressView(value: app.progress).tint(statusColor == .red ? .red : (app.job == .succeeded ? .green : .accentColor))
             }
+            .padding(14)
+            .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             LogView()
         }
     }
@@ -447,7 +449,8 @@ struct LogView: View {
                     .padding(10)
                 }
                 .frame(height: 220)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.62), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.secondary.opacity(0.12)))
                 .onChange(of: app.log.last?.text) { _, _ in
                     if let id = app.log.last?.id { proxy.scrollTo(id, anchor: .bottom) }
                 }
