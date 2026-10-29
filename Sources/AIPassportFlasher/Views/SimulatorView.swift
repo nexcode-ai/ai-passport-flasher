@@ -51,6 +51,12 @@ struct SimulatorView: View {
                     SimulatorWebView(baseURL: baseURL, controller: controller) { message in
                         host.reportWebError(message)
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                            .strokeBorder(Brand.hairline)
+                    )
+                    .padding(Space.s)
                 }
             case let .failed(message):
                 SimulatorFailureView(message: message) { host.restart() }
@@ -87,6 +93,7 @@ struct SimulatorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.surfaceSunken)
         .animation(.easeOut(duration: 0.2), value: session.toast)
     }
 }
@@ -112,8 +119,9 @@ struct SimulatorLibraryPanel: View {
                     }
                 }
                 .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(Color.primary.opacity(0.06)))
+                .frame(height: 32)
+                .background(RoundedRectangle(cornerRadius: Radius.field, style: .continuous).fill(Brand.surfaceSunken))
+                .overlay(RoundedRectangle(cornerRadius: Radius.field, style: .continuous).strokeBorder(Brand.hairline))
             }
             .padding(Space.m)
 
@@ -121,7 +129,9 @@ struct SimulatorLibraryPanel: View {
                 LazyVStack(alignment: .leading, spacing: 2, pinnedViews: []) {
                     if !filteredRecents.isEmpty {
                         groupHeader("最近试用") {
-                            Button("清除") { session.clearRecents() }
+                            Button { session.clearRecents() } label: {
+                                Label("清除", systemImage: "xmark")
+                            }
                                 .buttonStyle(.app(.tertiary, size: .small))
                         }
                         ForEach(filteredRecents) { play in row(.play(play)) }
@@ -284,8 +294,8 @@ struct SimulatorNowPlayingBar: View {
             }
             artwork
                 .frame(width: 48, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Brand.hairline))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Radius.field, style: .continuous).strokeBorder(Brand.hairline))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text("正在试用").font(.eyebrow).foregroundStyle(Brand.accent)
@@ -437,7 +447,10 @@ struct SimulatorNotice: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Button("知道了", action: dismiss).buttonStyle(.app(.secondary, size: .small))
+            Button(action: dismiss) {
+                Label("知道了", systemImage: "checkmark")
+            }
+            .buttonStyle(.app(.secondary, size: .small))
         }
         .padding(Space.s)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.inset, style: .continuous))
@@ -1087,6 +1100,13 @@ enum SimulatorBridgeScript {
         },
       };
       document.addEventListener('DOMContentLoaded', () => {
+        const shell = document.querySelector('.passport-shell');
+        if (shell && !shell.querySelector('.apf-shell-content')) {
+          const content = document.createElement('div');
+          content.className = 'apf-shell-content';
+          while (shell.firstChild) content.appendChild(shell.firstChild);
+          shell.appendChild(content);
+        }
         const watched = ['runtime-light', 'runtime-state', 'loading-stage', 'loading-percent', 'loading-detail',
           'screen-overlay', 'audio-enable', 'microphone-toggle', 'recording-toggle', 'recording-download'];
         const observer = new MutationObserver(schedule);
@@ -1103,8 +1123,20 @@ enum SimulatorBridgeScript {
 
 enum SimulatorTheme {
     static let css = """
-    :root { color-scheme: light dark; --apf-accent: #0E9F57; --mint: #20E47C; }
-    @media (prefers-color-scheme: dark) { :root { --apf-accent: #20E47C; } }
+    :root {
+      color-scheme: light dark;
+      --apf-accent: #0E9F57;
+      --apf-stage: #F4F5F4;
+      --apf-line: rgba(0, 0, 0, .10);
+      --mint: #20E47C;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --apf-accent: #20E47C;
+        --apf-stage: #1C1E20;
+        --apf-line: rgba(255, 255, 255, .11);
+      }
+    }
     html, body {
       background: transparent !important;
       overflow: hidden !important;
@@ -1115,14 +1147,27 @@ enum SimulatorTheme {
     }
     .emulator { display: block !important; min-height: 0 !important; height: 100vh; margin: 0 !important; }
     .workspace { display: block !important; height: 100vh; }
-    .stage { height: 100vh; padding: 24px !important; background: transparent !important; }
+    .stage { height: 100vh; padding: 18px !important; background: var(--apf-stage) !important; }
     .stage:fullscreen { background: #0B0D0F !important; }
     .passport-shell {
-      width: min(calc(100vw - 48px), calc((100vh - 48px) * 1334 / 1260)) !important;
-      filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .22)) !important;
+      width: min(calc(100vw - 36px), calc((100vh - 36px) * 566 / 882)) !important;
+      aspect-ratio: 566 / 882 !important;
+      overflow: hidden !important;
+      border: 1px solid var(--apf-line) !important;
+      border-radius: 20px !important;
+      background: var(--apf-stage) !important;
+      box-shadow: 0 14px 28px rgba(0, 0, 0, .16) !important;
+      filter: none !important;
+    }
+    .apf-shell-content {
+      position: absolute;
+      left: -40.46%;
+      top: -4.31%;
+      width: 180.92%;
+      height: 109.64%;
     }
     @media (prefers-color-scheme: dark) {
-      .passport-shell { filter: drop-shadow(0 22px 30px rgba(0, 0, 0, .55)) !important; }
+      .passport-shell { box-shadow: 0 18px 34px rgba(0, 0, 0, .42) !important; }
     }
     .screen-overlay strong, .loading-progress-meta, .loading-progress small, .hardware-key span {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;

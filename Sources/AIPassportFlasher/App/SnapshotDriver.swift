@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 /// Developer-only screenshot mode (`APF_SNAPSHOT_DIR=<dir>`): renders each
 /// screen into an off-screen window and writes PNGs, then quits. It never
@@ -69,9 +68,8 @@ enum SnapshotDriver {
         NSApp.terminate(nil)
     }
 
-    /// Captures the actual on-screen app window. WebKit is composited from
-    /// `takeSnapshot` so the embedded simulator is present even when the
-    /// window server denies screen-recording access.
+    /// Captures the actual on-screen app window without requiring the
+    /// system-wide screen-recording permission.
     private static func captureRealWindow(app: AppState, community: CommunityStore, dirPath: String) async {
         let dir = URL(fileURLWithPath: dirPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -113,39 +111,10 @@ enum SnapshotDriver {
         }
         root.cacheDisplay(in: root.bounds, to: rep)
 
-        let webViews = descendants(of: root).compactMap { $0 as? WKWebView }
-        if !webViews.isEmpty, let context = NSGraphicsContext(bitmapImageRep: rep) {
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = context
-            for webView in webViews where !webView.isHidden && webView.bounds.width > 0 {
-                if let image = try? await snapshot(webView) {
-                    var rect = webView.convert(webView.bounds, to: root)
-                    // Reserve the native now-playing bar in the composited capture.
-                    rect.size.height = max(0, rect.height - 28)
-                    image.draw(in: rect)
-                }
-            }
-            context.flushGraphics()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
         if let png = rep.representation(using: .png, properties: [:]) {
             do { try png.write(to: url); log("captured \(url.lastPathComponent)") }
             catch { log("write \(url.lastPathComponent) failed: \(error)") }
         }
-    }
-
-    private static func snapshot(_ webView: WKWebView) async throws -> NSImage {
-        try await withCheckedThrowingContinuation { continuation in
-            webView.takeSnapshot(with: nil) { image, error in
-                if let image { continuation.resume(returning: image) }
-                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
-            }
-        }
-    }
-
-    private static func descendants(of view: NSView) -> [NSView] {
-        view.subviews + view.subviews.flatMap(descendants)
     }
 
     private static func shoot<V: View>(_ view: V, app: AppState, community: CommunityStore, size: CGSize, to dir: URL, name: String, settle: Double = 3.5) async {

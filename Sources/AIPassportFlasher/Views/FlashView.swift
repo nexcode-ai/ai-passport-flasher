@@ -234,10 +234,12 @@ struct ConnectStep: View {
             }
             HStack(spacing: 12) {
                 Button { app.refreshPorts() } label: { Label("刷新", systemImage: "arrow.clockwise") }
+                    .buttonStyle(.app(.secondary, size: .small))
                 Toggle("显示全部串口", isOn: $app.showAllPorts)
                     .onChange(of: app.showAllPorts) { _, _ in app.refreshPorts() }
                 Spacer()
                 Button { app.readDeviceInfo() } label: { Label("读取芯片信息", systemImage: "cpu") }
+                    .buttonStyle(.app(.secondary, size: .small))
                     .disabled(app.selectedPort == nil || app.job.isRunning)
                     .help("只读：读取芯片型号、MAC 与 Flash 容量，不会写入任何数据（设备会重启一次）")
             }
@@ -291,7 +293,10 @@ struct FirmwareStep: View {
             } else if case let .factoryRestore(version, sn) = app.planSource {
                 Banner(kind: .info, text: "恢复出厂固件 \(version)：将写入默认固件 4 个分区及本机生成的设备凭据分区（SN \(sn)）。写入前会核对设备 MAC。")
                 ImageTable(editable: false)
-                Button("清除") { app.clearPlan() }
+                Button { app.clearPlan() } label: {
+                    Label("清除", systemImage: "xmark")
+                }
+                .buttonStyle(.app(.tertiary, size: .small))
             } else {
                 localPicker
             }
@@ -310,13 +315,13 @@ struct FirmwareStep: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button { app.tab = .community } label: { Label("去玩法社区", systemImage: "square.grid.2x2") }
+                    .buttonStyle(.app(.tertiary, size: .small))
             }
-            Picker("", selection: $app.mode) {
-                ForEach(FirmwareMode.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 460)
+            AppSegmentedControl(
+                FirmwareMode.allCases.map { ($0, $0.title) },
+                selection: $app.mode
+            )
+            .frame(maxWidth: 500)
 
             Group {
                 if app.mode == .merged {
@@ -325,15 +330,27 @@ struct FirmwareStep: View {
                     }
                     HStack {
                         Button { pick(multiple: false) } label: { Label(app.mergedImage == nil ? "选择 full.bin…" : "重新选择…", systemImage: "doc") }
-                        if app.mergedImage != nil { Button("清除") { app.clearPlan(keepMode: true) } }
+                            .buttonStyle(.app(.secondary))
+                        if app.mergedImage != nil {
+                            Button { app.clearPlan(keepMode: true) } label: {
+                                Label("清除", systemImage: "xmark")
+                            }
+                            .buttonStyle(.app(.tertiary, size: .small))
+                        }
                         Text("合并固件固定写入 0x0").font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
                     if !app.partitionImages.isEmpty { ImageTable(editable: true) }
                     HStack {
                         Button { pick(multiple: true) } label: { Label("添加 .bin 文件…", systemImage: "plus") }
+                            .buttonStyle(.app(.secondary))
                             .disabled(app.partitionImages.count >= DeviceSpec.maxPartitionFiles)
-                        if !app.partitionImages.isEmpty { Button("全部清除") { app.clearPlan(keepMode: true) } }
+                        if !app.partitionImages.isEmpty {
+                            Button { app.clearPlan(keepMode: true) } label: {
+                                Label("全部清除", systemImage: "trash")
+                            }
+                            .buttonStyle(.app(.tertiary, size: .small))
+                        }
                         Text("可重复添加，最多 8 个；默认地址依次为 0x0、0x8000、0x10000，可直接修改")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -399,7 +416,11 @@ struct SelectedPlayRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 8) {
                 Button { app.tab = .community } label: { Label("更换玩法", systemImage: "square.grid.2x2") }
-                Button("改用本地固件") { app.clearPlan() }
+                    .buttonStyle(.app(.secondary, size: .small))
+                Button { app.clearPlan() } label: {
+                    Label("改用本地固件", systemImage: "doc")
+                }
+                .buttonStyle(.app(.tertiary, size: .small))
             }
             .disabled(app.job.isRunning)
         }
@@ -426,7 +447,7 @@ struct ImageTable: View {
                     if editable, let idx = app.partitionImages.firstIndex(where: { $0.id == img.id }) {
                         TextField("0x0", text: $app.partitionImages[idx].offsetText)
                             .font(.body.monospaced())
-                            .textFieldStyle(.roundedBorder)
+                            .appField()
                             .frame(width: 120)
                             .frame(width: 130, alignment: .leading)
                     } else {
@@ -437,8 +458,10 @@ struct ImageTable: View {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(img.size), countStyle: .file))
                         .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 110, alignment: .trailing)
                     if editable {
-                        Button { app.removePartition(img.id) } label: { Image(systemName: "minus.circle.fill") }
-                            .buttonStyle(.plain).foregroundStyle(.secondary).frame(width: 28)
+                        IconButton(symbol: "minus.circle", help: "移除 \(img.name)", size: .small) {
+                            app.removePartition(img.id)
+                        }
+                        .frame(width: 28)
                     }
                 }
                 .padding(.horizontal, 8).padding(.vertical, 5)
@@ -487,7 +510,10 @@ struct WriteStep: View {
                 .buttonStyle(.app(.primary, size: .large))
                 .disabled(!app.blockers.isEmpty || app.job.isRunning)
                 if app.job.isRunning {
-                    Button("取消", role: .cancel) { app.cancelJob() }
+                    Button(role: .cancel) { app.cancelJob() } label: {
+                        Label("取消", systemImage: "xmark")
+                    }
+                    .buttonStyle(.app(.destructive))
                 }
                 if !app.blockers.isEmpty && !app.job.isRunning {
                     Text(app.blockers.joined(separator: " · ")).font(.callout).foregroundStyle(.secondary)
@@ -551,14 +577,23 @@ struct LogView: View {
             HStack {
                 Text("设备日志").font(.headline)
                 Spacer()
-                Button("复制") {
+                Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(app.logText, forType: .string)
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
                 }
-                Button("保存…") { save() }
-                Button("清空") { app.clearLog() }.disabled(app.job.isRunning)
+                .buttonStyle(.app(.tertiary, size: .small))
+                Button(action: save) {
+                    Label("保存…", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.app(.tertiary, size: .small))
+                Button { app.clearLog() } label: {
+                    Label("清空", systemImage: "trash")
+                }
+                .buttonStyle(.app(.tertiary, size: .small))
+                .disabled(app.job.isRunning)
             }
-            .controlSize(.small)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {

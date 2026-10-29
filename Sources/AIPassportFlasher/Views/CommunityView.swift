@@ -46,11 +46,7 @@ struct CommunityView: View {
 
     private var featuredSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("官方精选", systemImage: "sparkles")
-                    .font(.title2.bold())
-                Text("FoloToy 官方推荐").foregroundStyle(.secondary).font(.callout)
-                Spacer()
+            SectionHeader("官方精选", symbol: "sparkles", subtitle: "FoloToy 官方推荐") {
                 if store.featuredError != nil {
                     Button { store.loadFeatured() } label: {
                         Label("重新加载", systemImage: "arrow.clockwise")
@@ -98,15 +94,12 @@ struct CommunityView: View {
 
     private var librarySection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("全部玩法", systemImage: "rectangle.grid.2x2")
-                    .font(.title2.bold())
+            SectionHeader("全部玩法", symbol: "rectangle.grid.2x2") {
                 if store.total > 0 {
                     Text("\(store.total) 个作品")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
             }
             filterBar
             if let err = store.error {
@@ -182,8 +175,8 @@ struct CommunityView: View {
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.secondary.opacity(0.18)))
+                .background(Brand.surfaceSunken, in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Radius.field, style: .continuous).strokeBorder(Brand.hairline))
                 .frame(maxWidth: 440)
 
                 Picker("标签", selection: $store.query.tag) {
@@ -314,26 +307,27 @@ struct HeroFeaturedCard: View {
                     .lineSpacing(3)
                 Stats(play: play)
                 Spacer(minLength: 4)
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Button {
                         SimulatorSession.shared.tryPlay(play, app: app)
                     } label: {
                         Label("先试用", systemImage: "gamecontroller")
                     }
-                    .buttonStyle(.app(.secondary))
+                    .buttonStyle(.app(.secondary, size: .small))
                     Button(action: onDetail) {
                         Label("查看详情", systemImage: "info.circle")
                     }
-                    .buttonStyle(.app(.tertiary))
-                    InstallButton(play: play)
+                    .buttonStyle(.app(.tertiary, size: .small))
+                    Spacer(minLength: 0)
+                    InstallButton(play: play, compact: true)
                 }
             }
-            .padding(26)
+            .padding(Space.xl)
             .frame(width: 360, height: 330, alignment: .topLeading)
             .background(Brand.surface)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Brand.hairline))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.hero, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.hero, style: .continuous).strokeBorder(Brand.hairline))
         .shadow(color: .black.opacity(hovering ? 0.16 : 0.09), radius: hovering ? 24 : 14, y: hovering ? 12 : 7)
         .scaleEffect(hovering ? 1.004 : 1)
         .animation(.easeOut(duration: 0.18), value: hovering)
@@ -356,8 +350,8 @@ struct HeroFeaturedSkeleton: View {
             .padding(26)
             .frame(width: 360, height: 330)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .card(radius: 22)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.hero, style: .continuous))
+        .card(radius: Radius.hero)
         .pulsing()
     }
 }
@@ -415,10 +409,8 @@ struct PlayCard: View {
             }
             .padding(15)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.secondary.opacity(hovering ? 0.28 : 0.13)))
-        .shadow(color: .black.opacity(hovering ? 0.15 : 0.07), radius: hovering ? 18 : 9, y: hovering ? 9 : 4)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .card(radius: Radius.card, hovering: hovering)
         .scaleEffect(hovering ? 1.012 : 1)
         .animation(.easeOut(duration: 0.18), value: hovering)
         .onHover { hovering = $0 }
@@ -452,9 +444,8 @@ struct FeaturedCard: View {
         }
         .frame(width: 214)
         .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.secondary.opacity(hovering ? 0.27 : 0.12)))
-        .shadow(color: .black.opacity(hovering ? 0.13 : 0.06), radius: hovering ? 17 : 8, y: hovering ? 8 : 4)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .card(radius: Radius.card, hovering: hovering)
         .offset(y: hovering ? -3 : 0)
         .animation(.easeOut(duration: 0.18), value: hovering)
         .onHover { hovering = $0 }

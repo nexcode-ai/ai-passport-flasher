@@ -402,6 +402,78 @@ struct IconButton: View {
     private var side: CGFloat { size == .small ? 26 : (size == .regular ? 32 : 40) }
 }
 
+// MARK: - Inputs
+
+/// A compact segmented control that follows the same surface, radius and
+/// interaction rules as the rest of the app instead of inheriting the
+/// system's solid accent fill.
+struct AppSegmentedControl<Value: Hashable>: View {
+    let items: [(Value, String)]
+    @Binding var selection: Value
+
+    init(_ items: [(Value, String)], selection: Binding<Value>) {
+        self.items = items
+        _selection = selection
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(items.indices, id: \.self) { index in
+                let item = items[index]
+                let selected = item.0 == selection
+                Button {
+                    selection = item.0
+                } label: {
+                    Text(item.1)
+                        .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? Brand.accent : Color.primary.opacity(0.78))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(selected ? Brand.surfaceRaised : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(selected ? Brand.accent.opacity(0.28) : Color.clear)
+                        )
+                        .shadow(color: selected ? .black.opacity(0.06) : .clear, radius: 2, y: 1)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                .fill(Brand.surfaceSunken)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                .strokeBorder(Brand.hairline)
+        )
+        .animation(.easeOut(duration: 0.14), value: selection)
+    }
+}
+
+extension View {
+    func appField() -> some View {
+        textFieldStyle(.plain)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                    .fill(Brand.surfaceSunken)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                    .strokeBorder(Brand.hairline)
+            )
+    }
+}
+
 // MARK: - Native overlay scrollers
 
 /// Forces the thin, auto-hiding macOS overlay scroller on the enclosing scroll view,

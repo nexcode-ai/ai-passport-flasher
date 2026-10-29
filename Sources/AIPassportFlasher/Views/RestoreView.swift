@@ -24,19 +24,24 @@ struct RestoreView: View {
                 RestoreReasonCard()
                 StepCard(number: "01", title: "扫描设备二维码",
                          subtitle: "用手机扫描设备背面的二维码，打开专属页面并复制设备链接，然后通过私密方式发送到这台 Mac。") {
-                    Picker("", selection: $useManual) {
-                        Text("粘贴设备链接").tag(false)
-                        Text("手动输入 SN / KEY").tag(true)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360)
+                    AppSegmentedControl(
+                        [(false, "粘贴设备链接"), (true, "手动输入 SN / KEY")],
+                        selection: $useManual
+                    )
+                    .frame(maxWidth: 380)
                     if useManual {
-                        HStack {
-                            TextField("SN（12 位十六进制）", text: $manualSN).textFieldStyle(.roundedBorder).font(.body.monospaced()).frame(width: 220)
-                            SecureField("KEY", text: $manualKey).textFieldStyle(.roundedBorder).frame(maxWidth: 360)
+                        HStack(spacing: Space.s) {
+                            TextField("SN（12 位十六进制）", text: $manualSN)
+                                .font(.body.monospaced())
+                                .appField()
+                                .frame(width: 240)
+                            SecureField("KEY", text: $manualKey)
+                                .appField()
+                                .frame(maxWidth: 380)
                         }
                     } else {
                         SecureField("https://ai-passport.folotoy.cn/…?s=…&k=…", text: $link)
-                            .textFieldStyle(.roundedBorder)
+                            .appField()
                     }
                     Banner(kind: .info, text: "设备链接仅用于在本机生成身份分区；应用不会上传、保存，也不会把 SN / KEY 写入日志。")
                 }
