@@ -16,15 +16,24 @@ struct FlashView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
-                    eyebrow: "三步完成",
-                    title: "连接与安装",
-                    subtitle: "连接设备、选择固件，然后安全写入。完成后 AI Passport 会自动重启。",
-                    symbol: "cable.connector"
+                    eyebrow: app.job == .succeeded ? "安装完成" : "设备工作台",
+                    title: app.job == .succeeded ? "玩法已安装" : "安装到 AI Passport",
+                    subtitle: app.job == .succeeded
+                        ? "设备已经自动重启，可以拔下数据线开始体验。"
+                        : "跟随步骤连接设备、确认玩法并安全写入。",
+                    symbol: app.job == .succeeded ? "checkmark.seal.fill" : "cable.connector"
                 )
-                StepIndicator(current: currentStep, done: app.job == .succeeded)
-                ConnectStep()
-                FirmwareStep()
-                WriteStep(confirmFlash: $confirmFlash)
+                if app.job == .succeeded {
+                    InstallSuccessView()
+                } else {
+                    StepIndicator(current: currentStep, done: false)
+                    if let play = app.selectedPlay {
+                        InstallContextBar(play: play)
+                    }
+                    ConnectStep()
+                    FirmwareStep()
+                    WriteStep(confirmFlash: $confirmFlash)
+                }
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 28)
@@ -38,6 +47,107 @@ struct FlashView: View {
         } message: {
             Text("将向 \(app.selectedPort?.path ?? "") 写入 \(app.images.count) 个文件，覆盖设备 Flash 中对应区域的现有内容。写入过程中请勿拔线。")
         }
+    }
+}
+
+struct InstallContextBar: View {
+    let play: Play
+
+    var body: some View {
+        HStack(spacing: 14) {
+            CoverImage(url: play.thumbnailURL)
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("准备安装").font(.caption.weight(.semibold)).foregroundStyle(Brand.accent)
+                Text(play.title.display).font(.headline).lineLimit(1)
+            }
+            Spacer()
+            Label("固件已下载并通过校验", systemImage: "checkmark.shield.fill")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green)
+        }
+        .padding(14)
+        .card()
+    }
+}
+
+struct InstallSuccessView: View {
+    @EnvironmentObject var app: AppState
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 22) {
+            ZStack {
+                Circle().fill(Brand.accentSoft).frame(width: 112, height: 112)
+                Circle().stroke(Brand.accent.opacity(0.18), lineWidth: 10).frame(width: 88, height: 88)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(Brand.accent)
+            }
+            .scaleEffect(appeared ? 1 : 0.7)
+            .opacity(appeared ? 1 : 0)
+
+            VStack(spacing: 7) {
+                Text("安装成功").font(.system(size: 26, weight: .bold, design: .rounded))
+                if let play = app.selectedPlay {
+                    Text("“\(play.title.display)”已经写入 AI Passport")
+                        .font(.body).foregroundStyle(.secondary)
+                } else {
+                    Text("固件已经写入 AI Passport").font(.body).foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 0) {
+                SuccessHint(symbol: "power", title: "设备已重启", detail: "等待指示灯恢复")
+                Divider().frame(height: 52).padding(.horizontal, 22)
+                SuccessHint(symbol: "cable.connector.slash", title: "可以拔线", detail: "开始体验新玩法")
+                Divider().frame(height: 52).padding(.horizontal, 22)
+                SuccessHint(symbol: "arrow.counterclockwise", title: "随时可恢复", detail: "回到出厂系统")
+            }
+            .padding(20)
+            .sunken(radius: 16)
+
+            HStack(spacing: 12) {
+                Button {
+                    app.clearPlan()
+                    app.tab = .community
+                } label: {
+                    Label("发现更多玩法", systemImage: "sparkles")
+                }
+                .buttonStyle(PrimaryButtonStyle(size: .large))
+
+                Button {
+                    app.clearPlan()
+                    app.tab = .restore
+                } label: {
+                    Label("恢复出厂固件", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(SoftButtonStyle())
+            }
+        }
+        .padding(.vertical, 44)
+        .padding(.horizontal, 54)
+        .frame(maxWidth: .infinity)
+        .card(radius: 22, elevated: true)
+        .onAppear {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) { appeared = true }
+        }
+    }
+}
+
+struct SuccessHint: View {
+    let symbol: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: symbol).font(.title3).foregroundStyle(Brand.accent)
+            Text(title).font(.callout.weight(.semibold))
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -344,6 +454,7 @@ struct ImageTable: View {
 struct WriteStep: View {
     @EnvironmentObject var app: AppState
     @Binding var confirmFlash: Bool
+    @State private var showLog = false
 
     var body: some View {
         StepCard(number: "03", title: "写入与重启") {
@@ -395,7 +506,16 @@ struct WriteStep: View {
             }
             .padding(14)
             .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            LogView()
+            if let failureText {
+                Banner(kind: .error, text: "安装没有完成：\(failureText)\n请重新插拔数据线、关闭其他串口工具，然后再次尝试。")
+            }
+            DisclosureGroup("高级：设备日志与故障排查", isExpanded: $showLog) {
+                LogView().padding(.top, 10)
+            }
+            .font(.callout)
+        }
+        .onChange(of: app.job) { _, job in
+            if case .failed = job { showLog = true }
         }
     }
 
@@ -415,6 +535,13 @@ struct WriteStep: View {
         case .succeeded: return .green
         default: return .primary
         }
+    }
+
+    private var failureText: String? {
+        if case let .failed(message) = app.job {
+            return String(message.split(separator: "\n").first ?? "")
+        }
+        return nil
     }
 }
 

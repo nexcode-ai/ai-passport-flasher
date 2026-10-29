@@ -16,13 +16,14 @@ struct RestoreView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
-                    eyebrow: "安全恢复",
-                    title: "恢复出厂固件",
-                    subtitle: "恢复 AI Passport 默认系统与设备凭据，重新使用小程序的通行证功能。",
+                    eyebrow: "回到默认状态",
+                    title: "恢复设备",
+                    subtitle: "装过社区玩法后，可在这里恢复出厂系统与设备身份，重新使用小程序功能。",
                     symbol: "arrow.counterclockwise.circle.fill"
                 )
-                StepCard(number: "01", title: "获取设备专属链接",
-                         subtitle: "用手机扫描设备背面的二维码，打开设备专属页面，点击「复制设备链接到电脑」，通过私密方式发到这台电脑，然后粘贴到下面。") {
+                RestoreReasonCard()
+                StepCard(number: "01", title: "扫描设备二维码",
+                         subtitle: "用手机扫描设备背面的二维码，打开专属页面并复制设备链接，然后通过私密方式发送到这台 Mac。") {
                     Picker("", selection: $useManual) {
                         Text("粘贴设备链接").tag(false)
                         Text("手动输入 SN / KEY").tag(true)
@@ -37,24 +38,24 @@ struct RestoreView: View {
                         SecureField("https://ai-passport.folotoy.cn/…?s=…&k=…", text: $link)
                             .textFieldStyle(.roundedBorder)
                     }
-                    Banner(kind: .warning, text: "链接中包含这台设备的 SN 和 KEY，请勿公开分享。本程序只在本机用它生成凭据分区，不会上传、保存或写入日志。")
+                    Banner(kind: .info, text: "设备链接仅用于在本机生成身份分区；应用不会上传、保存，也不会把 SN / KEY 写入日志。")
                 }
-                StepCard(number: "02", title: "下载并校验默认固件",
-                         subtitle: "从 ai-passport.folotoy.cn 下载公开的默认固件（bootloader、分区表、主程序、默认头像），逐个核对大小与 SHA-256，并检查分区表与 AI Passport 一致。") {
+                StepCard(number: "02", title: "准备恢复内容",
+                         subtitle: "应用会下载官方默认固件并逐项校验，随后带你进入熟悉的设备连接与写入流程。") {
                     HStack(spacing: 12) {
                         Button {
                             prepare()
                         } label: {
-                            Label("准备恢复固件", systemImage: "arrow.down.doc")
+                            Label("校验并继续", systemImage: "checkmark.shield")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PrimaryButtonStyle(size: .large))
                         .disabled(working || app.job.isRunning || (useManual ? manualSN.isEmpty || manualKey.isEmpty : link.isEmpty))
                         if working { ProgressView(value: fraction).frame(width: 220) }
                     }
                     if let status { Text(status).foregroundStyle(.secondary) }
                     if let productWarning { Banner(kind: .warning, text: productWarning) }
                     if let errorText { Banner(kind: .error, text: errorText) }
-                    Text("准备完成后会进入「连接与安装」页面：写入前会先读取设备 MAC，与二维码中的 SN 不一致时立即停止，不写入任何数据。")
+                    Text("写入前会读取设备 MAC 并与二维码中的 SN 核对；信息不一致时流程会自动停止。")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -107,6 +108,29 @@ struct RestoreView: View {
     }
 }
 
+struct RestoreReasonCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Brand.accent)
+                .frame(width: 48, height: 48)
+                .background(Brand.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("什么时候需要恢复？").font(.headline)
+                Text("想回到设备原有功能、重新使用小程序，或准备安装另一个社区玩法时，都可以从这里开始。恢复会替换当前玩法。")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Label("约 3–5 分钟", systemImage: "clock")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .card()
+    }
+}
+
 struct AboutView: View {
     @EnvironmentObject var app: AppState
     @State private var esptoolVersion = "检测中…"
@@ -136,6 +160,8 @@ struct AboutView: View {
                 }
                 StepCard(number: "", title: "许可") {
                     Text("esptool 以 GPL-2.0-or-later 许可发布，其许可证随应用一并提供（Resources/esptool/LICENSE）。").font(.callout)
+                    Text("玩法模拟器基于 VOID001/FoloToy-Passport-Simulator（MIT）及 ESP-EMU，许可证随应用一并提供（Resources/simulator/LICENSE）。")
+                        .font(.callout)
                 }
             }
             .padding(.horizontal, 32)

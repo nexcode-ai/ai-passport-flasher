@@ -3,11 +3,12 @@ import Foundation
 import SwiftUI
 
 enum SidebarTab: String, CaseIterable, Identifiable {
-    case community, flash, restore, about
+    case community, simulator, flash, restore, about
     var id: String { rawValue }
     var title: String {
         switch self {
         case .community: return "玩法社区"
+        case .simulator: return "玩法模拟器"
         case .flash: return "连接与安装"
         case .restore: return "恢复出厂固件"
         case .about: return "关于"
@@ -16,6 +17,7 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .community: return "square.grid.2x2"
+        case .simulator: return "gamecontroller"
         case .flash: return "bolt.horizontal.circle"
         case .restore: return "arrow.counterclockwise.circle"
         case .about: return "info.circle"
@@ -51,6 +53,7 @@ struct DeviceInfo: Equatable {
 @MainActor
 final class AppState: ObservableObject {
     @Published var tab: SidebarTab = .community
+    @Published var simulatorPlayID: Int?
     @Published var downloadingPlayID: Int?
     @Published var downloadProgress: Double = 0
     @Published var downloadError: String?

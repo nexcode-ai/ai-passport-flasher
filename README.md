@@ -7,6 +7,7 @@ SwiftUI 编写，界面为简体中文。非官方工具。
 ## 功能
 
 - **玩法社区（首页）**：浏览 ai-passport.folotoy.cn 的社区玩法（封面、作者、简介、操作说明、下载量），支持搜索、分类、标签、排序和分页；顶部是「官方精选」。点击「安装」会下载固件、核对大小和 SHA-256，然后进入「连接与安装」。
+- **玩法模拟器**：内置 [VOID001/FoloToy-Passport-Simulator](https://github.com/VOID001/FoloToy-Passport-Simulator)，可先在 Mac 上通过 WebAssembly / QEMU 体验社区或内置玩法，不访问 USB 设备。模拟器本地服务仅监听 `127.0.0.1`，需要 Node.js 20 或更高版本。
 - **连接与安装**：三步流程：
   1. 连接设备：每 1.5 秒自动扫描 `/dev/cu.usbmodem*`，识别 Espressif USB JTAG/serial（VID 303A / PID 1001）；可选「读取芯片信息」（只读）。
   2. 选择固件：已选的社区玩法；或本地文件，可以是一个合并固件 `full.bin`（写入 0x0），也可以是最多 8 个分区 `.bin`（地址可编辑，默认依次为 0x0 / 0x8000 / 0x10000）。会检查 4 KB 对齐、区域重叠、8 MB 上限，以及 0x0 处的镜像头。
@@ -15,7 +16,7 @@ SwiftUI 编写，界面为简体中文。非官方工具。
 
 ## 构建与运行
 
-需要 Xcode（Swift 5.9+，已在 Xcode 27.1 / Swift 6.4 / macOS 26 arm64 上验证）。不需要 Python 或 ESP-IDF。
+需要 Xcode（Swift 5.9+，已在 Xcode 27.1 / Swift 6.4 / macOS 26 arm64 上验证）。刷写功能不需要 Python 或 ESP-IDF；使用内置玩法模拟器需要 Node.js 20 或更高版本。
 
 ```bash
 cd ~/ai-passport-flasher
@@ -47,6 +48,7 @@ Package.swift                 SwiftPM 工程（Xcode 可直接打开）
 Sources/AIPassportFlasher/    App/ Models/ Services/ Views/
 Tests/AIPassportFlasherTests/ 单元测试（NVS 一致性、输出解析、地址校验、真实 esptool）
 Resources/Info.plist
+Resources/Simulator/            内置模拟器运行时（MIT，约 19 MB）
 scripts/fetch-esptool.sh      下载并校验内置 esptool（Vendor/esptool，不入库）
 scripts/build-app.sh          生成 build/AIPassportFlasher.app
 scripts/snapshots.sh          重新生成截图

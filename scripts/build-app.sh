@@ -17,6 +17,7 @@ cp "$BIN" "$APP/Contents/MacOS/AIPassportFlasher"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 [[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$APP/Contents/Resources/" && \
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP/Contents/Info.plist" >/dev/null
+[[ -d Resources/Simulator ]] && ditto Resources/Simulator "$APP/Contents/Resources/simulator"
 # esptool keeps Espressif's own Developer ID signature; it is sealed as a resource.
 cp Vendor/esptool/esptool Vendor/esptool/LICENSE "$APP/Contents/Resources/esptool/"
 

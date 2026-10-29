@@ -1,0 +1,1190 @@
+import { supportsVirtualProvisioning, provisionXiaozhi } from "./provisioning.js";
+import { FirmwareOperationGate } from "./firmware-operation.js";
+import { QemuRuntime } from "./runtime.js";
+import { BrowserAudio } from "./audio.js";
+import {
+  formatFirmwareSize,
+  resolveCommunityPlayUrl,
+  resolveFirmwarePresetId,
+  validateFirmwareFile,
+} from "./firmware.js";
+import {
+  UartConsoleBuffer,
+  encodeUartCommand,
+} from "./uart-console.js";
+import {
+  REGISTER_NAMES,
+  formatHex32,
+} from "./inspector.js";
+import { copyCanvasPngToClipboard } from "./screen-capture.js";
+import {
+  recordingFilename,
+  startScreenRecording,
+  supportsScreenRecording,
+} from "./screen-recording.js";
+import { showSimulatorNoticeOnce } from "./simulator-notice.js";
+import { loadAnalytics } from "./analytics.js";
+
+
+
+const runtime = new QemuRuntime();
+const audio = new BrowserAudio((samples, sampleRate) => runtime.sendMicrophone(samples, sampleRate));
+const display = document.querySelector("#qemu-display");
+const context = display.getContext("2d", { alpha: false });
+const overlay = document.querySelector("#screen-overlay");
+const loadingProgress = document.querySelector("#loading-progress");
+const loadingProgressFill = document.querySelector("#loading-progress-fill");
+const loadingStage = document.querySelector("#loading-stage");
+const loadingPercent = document.querySelector("#loading-percent");
+const loadingDetail = document.querySelector("#loading-detail");
+const runtimeState = document.querySelector("#runtime-state");
+const runtimeLight = document.querySelector("#runtime-light");
+const logElement = document.querySelector("#event-log");
+const uploadControl = document.querySelector("#firmware-upload");
+const uploadLabel = uploadControl.querySelector(".upload-label");
+const firmwareInput = document.querySelector("#firmware-file");
+const firmwareGuidance = document.querySelector("#firmware-guidance");
+const firmwareGuidanceTitle = document.querySelector("#firmware-guidance-title");
+const simulatorNotice = document.querySelector("#simulator-notice");
+const confirmFirmwareUpload = document.querySelector("#confirm-firmware-upload");
+const firmwareSourceTabList = document.querySelector(".firmware-source-tabs");
+const firmwareSourceTabs = [...document.querySelectorAll(".firmware-source-tab")];
+const firmwareSourcePanels = [...document.querySelectorAll(".firmware-source-panel")];
+const communityPlayUrl = document.querySelector("#community-play-url");
+const presetButtons = [...document.querySelectorAll(".firmware-preset")];
+const presetButtonsById = new Map(
+  presetButtons.map((button) => [button.dataset.firmwareId, button]),
+);
+const initialPresetId = resolveFirmwarePresetId(
+  window.location.search,
+  presetButtonsById.keys(),
+);
+const initialPresetButton = presetButtonsById.get(initialPresetId);
+const presetFeedback = document.querySelector("#preset-feedback");
+const inspectorToggle = document.querySelector("#inspector-toggle");
+const screenshotCopy = document.querySelector("#screenshot-copy");
+const screenshotFeedback = document.querySelector("#screenshot-feedback");
+const recordingToggle = document.querySelector("#recording-toggle");
+const recordingLabel = document.querySelector("#recording-label");
+const recordingTime = document.querySelector("#recording-time");
+const recordingFeedback = document.querySelector("#recording-feedback");
+const recordingMessage = document.querySelector("#recording-message");
+const recordingDownload = document.querySelector("#recording-download");
+const fullscreenToggle = document.querySelector("#fullscreen-toggle");
+const simulatorStage = document.querySelector("#simulator-stage");
+const audioEnable = document.querySelector("#audio-enable");
+const microphoneToggle = document.querySelector("#microphone-toggle");
+const inspectorPanel = document.querySelector("#debug-panel");
+const debugSource = document.querySelector("#debug-source");
+const debugPc = document.querySelector("#debug-pc");
+const debugCycles = document.querySelector("#debug-cycles");
+const debugSp = document.querySelector("#debug-sp");
+const debugSampleState = document.querySelector("#debug-sample-state");
+const registerGrid = document.querySelector("#register-grid");
+const uartState = document.querySelector("#uart-state");
+const uartStats = document.querySelector("#uart-stats");
+const uartOutput = document.querySelector("#uart-output");
+const uartEmpty = document.querySelector("#uart-empty");
+const uartAutoscroll = document.querySelector("#uart-autoscroll");
+const uartPause = document.querySelector("#uart-pause");
+const uartClear = document.querySelector("#uart-clear");
+const uartInputForm = document.querySelector("#uart-input-form");
+const uartInput = document.querySelector("#uart-input");
+const networkState = document.querySelector("#network-state");
+const networkStateLight = document.querySelector("#network-state-light");
+const networkGateway = document.querySelector("#network-gateway");
+const networkPolicy = document.querySelector("#network-policy");
+const networkTx = document.querySelector("#network-tx");
+const networkTxFrames = document.querySelector("#network-tx-frames");
+const networkRx = document.querySelector("#network-rx");
+const networkRxFrames = document.querySelector("#network-rx-frames");
+const networkEvents = document.querySelector("#network-events");
+const networkEmpty = document.querySelector("#network-empty");
+let activeFirmwareName = initialPresetButton.dataset.firmwareName;
+let activePresetId = initialPresetId;
+let pendingPresetId = initialPresetId;
+let currentRuntimeState = "waiting";
+let activeDebugTab = "cpu";
+let latestDebugSnapshot = null;
+let renderedRegisters = new Uint32Array(32);
+const uartBuffer = new UartConsoleBuffer();
+let uartPaused = false;
+let uartRenderPending = false;
+let allowLocalFirmwareUpload = false;
+let fullscreenFallback = false;
+let screenshotFeedbackTimer = 0;
+let screenRecording = null;
+let recordingTimer = 0;
+let recordingStartedAt = 0;
+let recordingUrl = null;
+let recordingStopping = false;
+const recordingSupported = supportsScreenRecording(display);
+const heldPointerButtons = new Set();
+const heldKeyboardButtons = new Set();
+const activeButtonGestures = new Map();
+
+function log(message) {
+  const item = document.createElement("li");
+  item.textContent = `${new Date().toLocaleTimeString("zh-CN", { hour12: false })}  ${message}`;
+  logElement.prepend(item);
+  while (logElement.children.length > 3) logElement.lastElementChild.remove();
+}
+
+function renderUartConsole() {
+  uartRenderPending = false;
+  const snapshot = uartBuffer.snapshot();
+  uartOutput.textContent = snapshot.text;
+  uartEmpty.hidden = Boolean(snapshot.text);
+  uartStats.textContent =
+    `${snapshot.lineCount.toLocaleString("en-US")} lines · ` +
+    `${formatFirmwareSize(snapshot.totalBytes)}`;
+  uartStats.title = snapshot.droppedChars ?
+    `${snapshot.droppedChars.toLocaleString("en-US")} 个旧字符已丢弃` :
+    "UART 缓冲区";
+  if (uartAutoscroll.checked) uartOutput.scrollTop = uartOutput.scrollHeight;
+}
+
+function scheduleUartRender() {
+  if (uartPaused || uartRenderPending || activeDebugTab !== "uart") return;
+  uartRenderPending = true;
+  requestAnimationFrame(renderUartConsole);
+}
+
+function clearUartConsole() {
+  uartBuffer.clear();
+  renderUartConsole();
+}
+
+function resetNetworkView() {
+  networkState.textContent = "CONNECTING";
+  networkStateLight.dataset.state = "connecting";
+  networkTx.textContent = "0 B";
+  networkTxFrames.textContent = "0 frames";
+  networkRx.textContent = "0 B";
+  networkRxFrames.textContent = "0 frames";
+  networkEvents.replaceChildren();
+  networkEmpty.hidden = false;
+}
+
+function formatNetworkBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  return formatFirmwareSize(bytes);
+}
+
+function renderNetworkStatus(status) {
+  const labels = {
+    connected: "ONLINE",
+    connecting: "CONNECTING",
+    offline: "OFFLINE",
+    error: "ERROR",
+  };
+  networkState.textContent = labels[status.state] ?? String(status.state).toUpperCase();
+  networkStateLight.dataset.state = status.state;
+  networkTx.textContent = formatNetworkBytes(status.txBytes);
+  networkTxFrames.textContent = `${status.txFrames.toLocaleString("en-US")} frames`;
+  networkRx.textContent = formatNetworkBytes(status.rxBytes);
+  networkRxFrames.textContent = `${status.rxFrames.toLocaleString("en-US")} frames`;
+}
+
+function appendNetworkEvent(detail) {
+  if (detail.event === "bridge-ready") {
+    networkGateway.textContent = detail.gateway;
+    networkPolicy.textContent = detail.privateTargets ? "LAN ENABLED" : "PUBLIC ONLY";
+    return;
+  }
+  const labels = {
+    "connection-opening": "OPENING",
+    "connection-open": "OPEN",
+    "connection-close": "CLOSED",
+    "connection-error": "ERROR",
+    "connection-blocked": "BLOCKED",
+  };
+  if (!labels[detail.event]) return;
+  const item = document.createElement("li");
+  item.className = "network-event";
+  item.dataset.event = detail.event;
+  const protocol = document.createElement("span");
+  protocol.className = "network-event-protocol";
+  protocol.textContent = detail.protocol;
+  const target = document.createElement("span");
+  target.className = "network-event-target";
+  target.textContent = detail.target;
+  target.title = detail.message ?
+    `${detail.target} · ${detail.message}` :
+    detail.target;
+  const state = document.createElement("span");
+  state.className = "network-event-state";
+  state.textContent = labels[detail.event];
+  item.append(protocol, target, state);
+  networkEvents.prepend(item);
+  while (networkEvents.children.length > 40) {
+    networkEvents.lastElementChild.remove();
+  }
+  networkEmpty.hidden = true;
+}
+
+function setUartPaused(paused) {
+  uartPaused = paused;
+  uartState.textContent = paused ? "PAUSED" : "LIVE";
+  uartState.parentElement.dataset.state = paused ? "paused" : "live";
+  uartPause.textContent = paused ? "▶" : "Ⅱ";
+  uartPause.setAttribute("aria-pressed", String(paused));
+  uartPause.setAttribute("aria-label", paused ? "继续 UART 输出" : "暂停 UART 输出");
+  uartPause.title = paused ? "继续" : "暂停";
+  if (!paused) scheduleUartRender();
+}
+
+function setRuntimeState(state, detail) {
+  currentRuntimeState = state;
+  syncVirtualWifiControl();
+  syncRecordingControl();
+  runtimeState.textContent = detail || state;
+  runtimeState.title = detail || state;
+  runtimeLight.dataset.state = state;
+  const uartReady = state === "running";
+  uartInput.disabled = !uartReady;
+  uartInputForm.querySelector("button").disabled = !uartReady;
+  if (state === "running") overlay.hidden = true;
+  else overlay.hidden = false;
+}
+
+function setLoadingProgress(value, stage, detail) {
+  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  loadingProgressFill.style.width = `${percent}%`;
+  loadingPercent.value = `${percent}%`;
+  loadingPercent.textContent = `${percent}%`;
+  loadingStage.textContent = stage;
+  loadingDetail.textContent = detail;
+  loadingProgress.setAttribute("aria-valuenow", String(percent));
+  loadingProgress.setAttribute(
+    "aria-valuetext",
+    `${percent}%，${stage}，${detail}`,
+  );
+}
+
+function downloadProgressValue(loaded, total) {
+  if (total > 0) return 8 + (loaded / total) * 52;
+  return Math.min(58, 8 + Math.log2(loaded / 1024 + 1) * 5);
+}
+
+async function readFirmwareResponse(response, detail) {
+  const total = Number(response.headers.get("content-length")) || 0;
+  if (!response.body) {
+    const firmware = await response.arrayBuffer();
+    setLoadingProgress(60, "固件下载完成", formatFirmwareSize(firmware.byteLength));
+    return firmware;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    const byteDetail = total > 0
+      ? `${formatFirmwareSize(loaded)} / ${formatFirmwareSize(total)}`
+      : `${formatFirmwareSize(loaded)} 已下载`;
+    setLoadingProgress(downloadProgressValue(loaded, total), "正在下载固件", byteDetail);
+  }
+
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  setLoadingProgress(60, "固件下载完成", detail || formatFirmwareSize(loaded));
+  return bytes.buffer;
+}
+
+function readLocalFirmware(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("progress", (event) => {
+      const total = event.lengthComputable ? event.total : file.size;
+      setLoadingProgress(
+        downloadProgressValue(event.loaded, total),
+        "正在读取本地固件",
+        `${formatFirmwareSize(event.loaded)} / ${formatFirmwareSize(total)}`,
+      );
+    });
+    reader.addEventListener("load", () => {
+      setLoadingProgress(60, "固件读取完成", formatFirmwareSize(file.size));
+      resolve(reader.result);
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error || new Error("无法读取本地固件"));
+    });
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function setUploadBusy(busy) {
+  firmwareInput.disabled = busy || !allowLocalFirmwareUpload;
+  uploadControl.disabled = busy;
+  uploadControl.setAttribute("aria-disabled", String(busy));
+  uploadControl.setAttribute("aria-busy", String(busy));
+  confirmFirmwareUpload.disabled = busy;
+  communityPlayUrl.disabled = busy;
+  firmwareSourceTabs.forEach((button) => {
+    button.disabled = busy;
+  });
+  presetButtons.forEach((button) => {
+    button.disabled = busy;
+  });
+}
+
+function renderPresetStates() {
+  presetButtons.forEach((button) => {
+    const active = button.dataset.firmwareId === activePresetId;
+    const loading =
+      button.dataset.firmwareId === pendingPresetId &&
+      currentRuntimeState === "loading";
+    button.classList.toggle("is-active", active);
+    button.classList.toggle("is-loading", loading);
+    button.setAttribute("aria-pressed", String(active));
+    button.querySelector(".preset-state").textContent =
+      loading ? "加载中" : active ? "当前" : "运行";
+  });
+}
+
+function clearDisplay() {
+  context.fillStyle = "#02070d";
+  context.fillRect(0, 0, display.width, display.height);
+}
+
+function resetScreenOverlay() {
+  overlay.classList.remove("is-unsupported", "is-error");
+  loadingProgress.removeAttribute("aria-invalid");
+  overlay.querySelector("strong").textContent = "QEMU WASM";
+  setLoadingProgress(0, "准备运行环境", "等待运行时镜像");
+}
+
+function buildRegisterGrid() {
+  const fragment = document.createDocumentFragment();
+  REGISTER_NAMES.forEach((name, index) => {
+    const row = document.createElement("div");
+    row.className = "register";
+    row.dataset.register = String(index);
+
+    const label = document.createElement("span");
+    label.className = "register-name";
+    label.textContent = `x${index} · ${name}`;
+    const value = document.createElement("span");
+    value.className = "register-value";
+    value.textContent = "0x00000000";
+    row.append(label, value);
+    fragment.append(row);
+  });
+  registerGrid.replaceChildren(fragment);
+}
+
+function renderDebugSnapshot(snapshot) {
+  if (!snapshot) return;
+  debugPc.textContent = formatHex32(snapshot.pc);
+  debugCycles.textContent = Number(snapshot.cycles).toLocaleString("en-US");
+  debugSp.textContent = formatHex32(snapshot.registers[2]);
+  debugSampleState.textContent = `LIVE · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+
+  registerGrid.querySelectorAll(".register").forEach((row, index) => {
+    const value = Number(snapshot.registers[index]) >>> 0;
+    row.classList.toggle("has-changed", renderedRegisters[index] !== value);
+    row.querySelector(".register-value").textContent = formatHex32(value);
+    renderedRegisters[index] = value;
+  });
+}
+
+function updateInspectorSource() {
+  debugSource.textContent = activeFirmwareName;
+}
+
+function syncNetworkDebugState() {
+  const enabled =
+    activeDebugTab === "network" &&
+    inspectorPanel.classList.contains("is-open");
+  runtime.setNetworkDebug(enabled);
+  runtime.setCpuDebug(activeDebugTab === "cpu" && inspectorPanel.classList.contains("is-open"));
+}
+
+function selectDebugTab(tab) {
+  activeDebugTab = tab;
+  document.querySelectorAll("[data-debug-tab]").forEach((button) => {
+    const selected = button.dataset.debugTab === tab;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  document.querySelectorAll("[data-debug-view]").forEach((view) => {
+    const selected = view.dataset.debugView === tab;
+    view.classList.toggle("is-active", selected);
+    view.hidden = !selected;
+  });
+  if (tab === "cpu") renderDebugSnapshot(latestDebugSnapshot);
+  if (tab === "uart") renderUartConsole();
+  syncNetworkDebugState();
+}
+
+function setInspectorOpen(open) {
+  document.body.classList.toggle("inspector-open", open);
+  inspectorPanel.classList.toggle("is-open", open);
+  inspectorPanel.setAttribute("aria-hidden", String(!open));
+  inspectorPanel.inert = !open;
+  inspectorToggle.setAttribute("aria-expanded", String(open));
+  if (open) {
+    selectDebugTab(activeDebugTab);
+    document.querySelector(`[data-debug-tab="${activeDebugTab}"]`).focus();
+  } else {
+    inspectorToggle.focus();
+  }
+  syncNetworkDebugState();
+}
+
+function isSimulatorFullscreen() {
+  return document.fullscreenElement === simulatorStage || fullscreenFallback;
+}
+
+function syncFullscreenState() {
+  const active = isSimulatorFullscreen();
+  simulatorStage.classList.toggle("is-fullscreen", active);
+  document.body.classList.toggle("simulator-fullscreen", fullscreenFallback);
+  fullscreenToggle.setAttribute("aria-pressed", String(active));
+  fullscreenToggle.setAttribute(
+    "aria-label",
+    active ? "退出模拟器全屏" : "全屏显示模拟器",
+  );
+  fullscreenToggle.title = active ? "退出模拟器全屏" : "全屏显示模拟器";
+}
+
+async function enterSimulatorFullscreen() {
+  if (inspectorPanel.classList.contains("is-open")) setInspectorOpen(false);
+  fullscreenFallback = true;
+  syncFullscreenState();
+  if (typeof simulatorStage.requestFullscreen === "function") {
+    try {
+      await simulatorStage.requestFullscreen();
+      fullscreenFallback = false;
+      syncFullscreenState();
+      return;
+    } catch {
+      // Keep the viewport-filling mode when fullscreen is unavailable.
+    }
+  }
+}
+
+async function exitSimulatorFullscreen() {
+  fullscreenFallback = false;
+  if (document.fullscreenElement === simulatorStage) {
+    await document.exitFullscreen();
+  }
+  syncFullscreenState();
+}
+
+async function toggleSimulatorFullscreen() {
+  if (isSimulatorFullscreen()) {
+    await exitSimulatorFullscreen();
+    fullscreenToggle.focus();
+    return;
+  }
+  await enterSimulatorFullscreen();
+}
+
+function showScreenshotFeedback(state, message) {
+  window.clearTimeout(screenshotFeedbackTimer);
+  screenshotCopy.dataset.state = state;
+  screenshotCopy.setAttribute(
+    "aria-label",
+    state === "success"
+      ? "模拟器屏幕截图已复制到剪贴板"
+      : "截取模拟器屏幕并复制到剪贴板",
+  );
+  screenshotCopy.title = message;
+  screenshotFeedback.dataset.state = state;
+  screenshotFeedback.textContent = message;
+  screenshotFeedback.hidden = false;
+  screenshotFeedbackTimer = window.setTimeout(() => {
+    delete screenshotCopy.dataset.state;
+    screenshotCopy.setAttribute("aria-label", "截取模拟器屏幕并复制到剪贴板");
+    screenshotCopy.title = "复制屏幕截图";
+    screenshotFeedback.hidden = true;
+  }, 2400);
+}
+
+function screenshotErrorMessage(error) {
+  if (/[\u4e00-\u9fff]/u.test(error?.message || "")) return error.message;
+  if (["NotAllowedError", "SecurityError"].includes(error?.name)) {
+    return "无法访问剪贴板，请检查浏览器权限";
+  }
+  return "屏幕截图复制失败，请重试";
+}
+
+async function copySimulatorScreen() {
+  window.clearTimeout(screenshotFeedbackTimer);
+  delete screenshotCopy.dataset.state;
+  screenshotCopy.disabled = true;
+  screenshotCopy.setAttribute("aria-busy", "true");
+  screenshotFeedback.removeAttribute("data-state");
+  screenshotFeedback.textContent = "正在复制屏幕截图";
+  screenshotFeedback.hidden = false;
+
+  try {
+    await copyCanvasPngToClipboard(display);
+    showScreenshotFeedback("success", "屏幕截图已复制到剪贴板");
+    log("屏幕截图已复制到剪贴板");
+  } catch (error) {
+    const message = screenshotErrorMessage(error);
+    showScreenshotFeedback("error", message);
+    log(message);
+  } finally {
+    screenshotCopy.disabled = false;
+    screenshotCopy.setAttribute("aria-busy", "false");
+  }
+}
+
+function syncRecordingControl() {
+  const active = Boolean(screenRecording);
+  recordingToggle.disabled = !recordingSupported || recordingStopping ||
+    (!active && currentRuntimeState !== "running");
+  recordingToggle.setAttribute("aria-pressed", String(active));
+  recordingToggle.setAttribute("aria-busy", String(recordingStopping));
+  const label = !recordingSupported ? "当前浏览器不支持屏幕录制" :
+    recordingStopping ? "正在生成录屏视频" :
+    active ? "停止录屏并下载视频" : "开始录制 AI Passport 屏幕";
+  recordingToggle.setAttribute("aria-label", label);
+  recordingToggle.title = label;
+  recordingLabel.textContent = recordingStopping ? "保存中" : active ? "停止" : "录屏";
+  recordingTime.hidden = !active;
+}
+
+function updateRecordingTime() {
+  const seconds = Math.floor((performance.now() - recordingStartedAt) / 1000);
+  recordingTime.textContent =
+    `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function showRecordingFeedback(state, message) {
+  recordingFeedback.dataset.state = state;
+  recordingMessage.textContent = message;
+  recordingFeedback.hidden = false;
+}
+
+async function toggleScreenRecording() {
+  if (screenRecording) {
+    if (recordingStopping) return;
+    recordingStopping = true;
+    window.clearInterval(recordingTimer);
+    syncRecordingControl();
+    showRecordingFeedback("saving", "正在生成录屏视频…");
+    screenRecording.stop();
+    return;
+  }
+
+  recordingDownload.hidden = true;
+  try {
+    screenRecording = startScreenRecording(display);
+    recordingStartedAt = performance.now();
+    updateRecordingTime();
+    recordingTimer = window.setInterval(updateRecordingTime, 250);
+    syncRecordingControl();
+    showRecordingFeedback("recording", "正在录制屏幕 · 点击停止并下载");
+    log("开始录制 AI Passport 屏幕");
+    const blob = await screenRecording.completed;
+    if (!blob) return;
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    recordingUrl = URL.createObjectURL(blob);
+    recordingDownload.href = recordingUrl;
+    recordingDownload.download = recordingFilename(blob.type);
+    recordingDownload.hidden = false;
+    showRecordingFeedback("success", `录屏已完成 · ${formatFirmwareSize(blob.size)}`);
+    recordingDownload.click();
+    log("屏幕录制完成，可点击“下载视频”保存");
+  } catch (error) {
+    const message = /[\u4e00-\u9fff]/u.test(error?.message || "") ? error.message :
+      "屏幕录制失败，请重试或使用新版浏览器";
+    showRecordingFeedback("error", message);
+    log(message);
+  } finally {
+    window.clearInterval(recordingTimer);
+    screenRecording = null;
+    recordingStopping = false;
+    syncRecordingControl();
+  }
+}
+
+function drawFrame({ pixels, x = 0, y = 0, width, height }) {
+  if (x + width > display.width || y + height > display.height) return;
+  context.putImageData(
+    new ImageData(pixels, width, height),
+    x,
+    y,
+  );
+}
+
+// Send physical transitions immediately. The firmware already recognizes clicks,
+// double clicks and holds; delaying a click here added 300 ms to every interaction.
+function startButtonPress(key) {
+  if (key === "POWER") { runtime.restart(); log("POWER 按下"); return; }
+  if (activeButtonGestures.has(key)) return;
+  activeButtonGestures.set(key, true);
+  runtime.setButton(key, true);
+  log(`${key} 按下`);
+}
+
+function finishButtonPress(key) {
+  if (!activeButtonGestures.delete(key)) return;
+  runtime.setButton(key, false);
+}
+
+function resetButtonGestures() {
+  runtime.releaseButtons();
+  activeButtonGestures.clear();
+  heldPointerButtons.clear();
+  heldKeyboardButtons.clear();
+}
+
+function releasePointerButton(button, cancelled = false) {
+  const key = button.dataset.key;
+  if (!heldPointerButtons.delete(key)) return;
+  finishButtonPress(key, cancelled);
+}
+
+runtime.addEventListener("state", (event) => {
+  const state = event.detail;
+  if (state === "loading" || state === "restarting") audio.reset();
+  if (
+    state === "restarting" ||
+    (state === "loading" && currentRuntimeState !== "loading")
+  ) {
+    resetScreenOverlay();
+  }
+  if (state === "running") {
+    setLoadingProgress(100, "装载完成", `${activeFirmwareName} 已启动`);
+    if (pendingPresetId !== undefined) activePresetId = pendingPresetId;
+    pendingPresetId = undefined;
+    setUploadBusy(false);
+    setRuntimeState(state, `${activeFirmwareName} 已运行`);
+    presetFeedback.textContent = `${activeFirmwareName} 已刷写并运行`;
+    log(`${activeFirmwareName} 已自动运行`);
+  } else if (state === "loading") {
+    resetButtonGestures();
+    setUploadBusy(true);
+    setRuntimeState(state, `正在加载 ${activeFirmwareName}`);
+    if (loadingProgress.getAttribute("aria-valuenow") === "0") {
+      setLoadingProgress(3, "准备装载固件", activeFirmwareName);
+    }
+  } else {
+    setLoadingProgress(18, "正在重启虚拟设备", "重置处理器与外设状态");
+    setRuntimeState(state, "QEMU 重启中");
+    log("QEMU hard restart");
+  }
+  renderPresetStates();
+});
+runtime.addEventListener("progress", (event) => {
+  const { value, stage, detail } = event.detail;
+  setLoadingProgress(value, stage, detail);
+});
+runtime.addEventListener("frame", (event) => drawFrame(event.detail));
+runtime.addEventListener("audio-config", (event) => audio.configure(event.detail));
+runtime.addEventListener("audio", (event) => audio.play(event.detail));
+runtime.addEventListener("microphone-status", ({ detail }) => {
+  const message = `麦克风：采集 ${detail.capturedFrames} 样本 · 写入固件缓冲区 ${detail.deliveredBytes} 字节 · ` +
+    `${detail.sampleRate} Hz / ${detail.channels} 声道 · 电平 ${(detail.level * 100).toFixed(2)}%`;
+  document.querySelector('#microphone-status').textContent = message;
+  microphoneToggle.title = message;
+});
+const virtualWifiButton = document.querySelector('#virtual-wifi-connect');
+let provisionableFirmware = null;
+const firmwareOperations = new FirmwareOperationGate();
+
+function syncVirtualWifiControl() {
+  virtualWifiButton.hidden = !provisionableFirmware;
+  virtualWifiButton.disabled = !provisionableFirmware || currentRuntimeState !== "running";
+}
+
+function beginFirmwareOperation() {
+  const operation = firmwareOperations.begin();
+  provisionableFirmware = null;
+  syncVirtualWifiControl();
+  setUploadBusy(true);
+  return operation;
+}
+
+runtime.addEventListener('firmware', async ({ detail }) => {
+  const operation = firmwareOperations.current();
+  provisionableFirmware = null;
+  syncVirtualWifiControl();
+  try {
+    if (await supportsVirtualProvisioning(detail.bytes) && firmwareOperations.isCurrent(operation)) {
+      provisionableFirmware = detail.bytes;
+      syncVirtualWifiControl();
+    }
+  } catch (error) { log(`配网适配检查失败：${error.message}`); }
+});
+virtualWifiButton.addEventListener('click', async () => {
+  const firmware = provisionableFirmware;
+  if (!firmware) return;
+  const operation = beginFirmwareOperation();
+  try {
+    const response = await fetch('/assets/provisioning/xiaozhi-wifi.nvs');
+    if (!response.ok) throw new Error('读取模拟配网配置失败');
+    const configured = await provisionXiaozhi(firmware, new Uint8Array(await response.arrayBuffer()));
+    if (!firmwareOperations.isCurrent(operation)) return;
+    log('已为小智写入模拟 Wi-Fi 配置，正在重启。此操作只修改本次模拟的虚拟 Flash。');
+    await runtime.loadFirmware(configured);
+  } catch (error) {
+    log(`模拟配网失败：${error.message}`);
+    if (firmwareOperations.isCurrent(operation)) {
+      provisionableFirmware = firmware;
+      setUploadBusy(false);
+      syncVirtualWifiControl();
+    }
+  }
+});
+runtime.addEventListener("firmware", () => {
+  clearUartConsole();
+  resetNetworkView();
+  updateInspectorSource();
+});
+runtime.addEventListener("debug", (event) => {
+  latestDebugSnapshot = event.detail;
+  if (inspectorPanel.classList.contains("is-open") && activeDebugTab === "cpu") {
+    renderDebugSnapshot(latestDebugSnapshot);
+  }
+});
+runtime.addEventListener("uart", (event) => {
+  uartBuffer.append(event.detail);
+  scheduleUartRender();
+  if (/\\b(error|fail|panic|abort)\\b/i.test(event.detail)) log(event.detail);
+});
+runtime.addEventListener("warning", (event) => log(event.detail));
+runtime.addEventListener("network-status", (event) => {
+  renderNetworkStatus(event.detail);
+});
+runtime.addEventListener("network-event", (event) => {
+  if (
+    activeDebugTab !== "network" ||
+    !inspectorPanel.classList.contains("is-open")
+  ) {
+    return;
+  }
+  appendNetworkEvent(event.detail);
+  if (event.detail.event === "connection-blocked") {
+    log(`网络请求已阻止：${event.detail.target}`);
+  }
+});
+runtime.addEventListener("unsupported-feature", (event) => {
+  if (event.detail.feature !== "ble") return;
+  audio.reset();
+  setUploadBusy(false);
+  setRuntimeState("unsupported", "检测到 BLE，模拟器已暂停");
+  overlay.classList.add("is-unsupported");
+  overlay.querySelector("strong").textContent = "模拟器暂不支持蓝牙";
+  loadingDetail.textContent = "This Emulator Does Not Support BLE";
+  presetFeedback.textContent = `${activeFirmwareName} 需要 BLE，已停止运行`;
+  log(`${activeFirmwareName} 使用了暂不支持的 BLE`);
+});
+runtime.addEventListener("error", (event) => {
+  pendingPresetId = undefined;
+  setUploadBusy(false);
+  setRuntimeState("error", "运行时不可用");
+  overlay.classList.add("is-error");
+  loadingProgress.setAttribute("aria-invalid", "true");
+  setLoadingProgress(
+    loadingProgress.getAttribute("aria-valuenow"),
+    "装载失败",
+    event.detail,
+  );
+  presetFeedback.textContent = `加载失败：${event.detail}`;
+  renderPresetStates();
+  log(event.detail);
+});
+
+document.querySelectorAll("[data-key]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    if (event.detail === 0) {
+      startButtonPress(button.dataset.key);
+      finishButtonPress(button.dataset.key);
+    }
+  });
+  button.addEventListener("pointerdown", (event) => {
+    button.classList.add("is-pressed");
+    audio.enableOutput().catch(() => {});
+    if (!heldPointerButtons.has(button.dataset.key)) {
+      heldPointerButtons.add(button.dataset.key);
+      button.setPointerCapture?.(event.pointerId);
+      startButtonPress(button.dataset.key);
+    }
+  });
+  button.addEventListener("pointerup", () => {
+    button.classList.remove("is-pressed");
+    releasePointerButton(button);
+  });
+  button.addEventListener("pointercancel", () => {
+    button.classList.remove("is-pressed");
+    releasePointerButton(button, true);
+  });
+  button.addEventListener("pointerleave", () => button.classList.remove("is-pressed"));
+});
+document.querySelector("#restart-runtime").addEventListener("click", () => {
+  if (!runtime.restart()) log("无法硬重启：WASM runtime 未安装");
+});
+audioEnable.addEventListener("click", async () => {
+  try {
+    await audio.enableOutput();
+    audioEnable.classList.add("is-active");
+    audioEnable.setAttribute("aria-pressed", "true");
+    log("扬声器输出已启用");
+  } catch (error) {
+    log(`扬声器启用失败：${error.message}`);
+  }
+});
+microphoneToggle.addEventListener("click", async () => {
+  if (audio.microphoneActive) {
+    audio.stopMicrophone();
+    return;
+  }
+  try {
+    await audio.startMicrophone();
+  } catch (error) {
+    log(`麦克风启用失败：${error.message}`);
+  }
+});
+audio.addEventListener("microphone", (event) => {
+  microphoneToggle.classList.toggle("is-active", event.detail);
+  microphoneToggle.setAttribute("aria-pressed", String(event.detail));
+  microphoneToggle.textContent = event.detail ? "MIC 已授权" : "授权 MIC";
+  log(event.detail ? "麦克风输入已启用" : "麦克风输入已关闭");
+});
+audio.addEventListener("status", ({ detail }) => {
+  document.querySelector("#audio-status").textContent =
+    `声音缓冲 ${Math.round(detail.bufferedMs)} ms · 缓冲中断 ${detail.underruns} 次 · ` +
+    `采样 ${detail.inputRate} Hz · 已接收 ${detail.inputFrames} / 已播放 ${detail.outputFrames}`;
+});
+inspectorToggle.addEventListener("click", () => {
+  setInspectorOpen(!inspectorPanel.classList.contains("is-open"));
+});
+document.querySelector("#inspector-close").addEventListener("click", () => setInspectorOpen(false));
+screenshotCopy.addEventListener("click", copySimulatorScreen);
+recordingToggle.addEventListener("click", toggleScreenRecording);
+window.addEventListener("pagehide", () => {
+  screenRecording?.cancel();
+  window.clearInterval(recordingTimer);
+  if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+  recordingUrl = null;
+  recordingDownload.hidden = true;
+  recordingFeedback.hidden = true;
+});
+fullscreenToggle.addEventListener("click", toggleSimulatorFullscreen);
+document.addEventListener("fullscreenchange", () => {
+  if (document.fullscreenElement !== simulatorStage) fullscreenFallback = false;
+  syncFullscreenState();
+});
+document.querySelectorAll("[data-debug-tab]").forEach((button) => {
+  button.addEventListener("click", () => selectDebugTab(button.dataset.debugTab));
+});
+uartPause.addEventListener("click", () => setUartPaused(!uartPaused));
+uartClear.addEventListener("click", clearUartConsole);
+uartAutoscroll.addEventListener("change", () => {
+  if (uartAutoscroll.checked) uartOutput.scrollTop = uartOutput.scrollHeight;
+});
+uartInputForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const command = uartInput.value;
+  if (!runtime.sendUart(encodeUartCommand(command))) {
+    log("UART 输入失败：运行时未就绪");
+    return;
+  }
+  uartInput.value = "";
+});
+let selectedFirmwareSource = "community";
+const uploadError = document.querySelector("#firmware-upload-error");
+
+function selectFirmwareSource(source) {
+  if (source === "local" && !allowLocalFirmwareUpload) {
+    source = "community";
+  }
+  selectedFirmwareSource = source;
+  uploadError.textContent = "";
+  firmwareSourceTabs.forEach((button) => {
+    const selected = button.id === `firmware-source-${source}-tab`;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  firmwareSourcePanels.forEach((panel) => {
+    panel.hidden = panel.id !== `firmware-source-${source}`;
+  });
+  if (source === "community") {
+    confirmFirmwareUpload.textContent = "导入并运行";
+    window.setTimeout(() => communityPlayUrl.focus(), 0);
+  } else {
+    confirmFirmwareUpload.textContent = "选择固件";
+  }
+}
+
+async function configureFirmwareSources() {
+  try {
+    const response = await fetch("/api/runtime-config", { cache: "no-store" });
+    if (!response.ok) throw new Error(`运行配置请求失败: ${response.status}`);
+    const config = await response.json();
+    allowLocalFirmwareUpload = config.allowLocalFirmwareUpload === true;
+    loadAnalytics(config.analytics);
+  } catch (error) {
+    allowLocalFirmwareUpload = false;
+    log(`本地固件入口保持关闭：${error.message}`);
+  }
+
+  firmwareSourceTabList.hidden = !allowLocalFirmwareUpload;
+  firmwareInput.disabled = !allowLocalFirmwareUpload;
+  uploadControl.disabled = false;
+  uploadControl.setAttribute("aria-disabled", "false");
+  uploadLabel.textContent = allowLocalFirmwareUpload ? "上传固件" : "社区固件";
+  firmwareGuidanceTitle.textContent =
+    allowLocalFirmwareUpload ? "上传固件" : "加载社区固件";
+  selectFirmwareSource(allowLocalFirmwareUpload ? "local" : "community");
+}
+
+async function loadPresetFirmware(button) {
+  const operation = beginFirmwareOperation();
+  const firmwareName = button.dataset.firmwareName;
+  const firmwareUrl = button.dataset.firmwareUrl;
+  const previousFirmwareName = activeFirmwareName;
+  const previousRuntimeState = currentRuntimeState;
+  const previousRuntimeDetail = runtimeState.textContent;
+  const previousPendingPresetId = pendingPresetId;
+
+  try {
+    pendingPresetId = button.dataset.firmwareId;
+    activeFirmwareName = firmwareName;
+    setUploadBusy(true);
+    setRuntimeState("loading", `正在下载 ${firmwareName}`);
+    resetScreenOverlay();
+    setLoadingProgress(5, "正在请求固件", firmwareName);
+    presetFeedback.textContent = `正在加载 ${firmwareName}`;
+    renderPresetStates();
+
+    const response = await fetch(firmwareUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`镜像请求失败: ${response.status}`);
+    const firmware = await readFirmwareResponse(response, firmwareName);
+    if (!firmwareOperations.isCurrent(operation)) return;
+    setLoadingProgress(62, "正在校验固件", formatFirmwareSize(firmware.byteLength));
+    validateFirmwareFile({ name: firmwareUrl, size: firmware.byteLength });
+    log(`加载 ${firmwareName} (${formatFirmwareSize(firmware.byteLength)})`);
+    await runtime.loadFirmware(firmware);
+  } catch (error) {
+    if (!firmwareOperations.isCurrent(operation)) return;
+    pendingPresetId = previousPendingPresetId;
+    activeFirmwareName = previousFirmwareName;
+    setUploadBusy(false);
+    setRuntimeState(previousRuntimeState, previousRuntimeDetail);
+    presetFeedback.textContent = `${firmwareName} 加载失败：${error.message}`;
+    renderPresetStates();
+    log(`${firmwareName} 加载失败：${error.message}`);
+  }
+}
+
+presetButtons.forEach((button) => {
+  button.addEventListener("click", () => loadPresetFirmware(button));
+});
+
+firmwareSourceTabs.forEach((button) => {
+  button.addEventListener("click", () => {
+    selectFirmwareSource(button.id === "firmware-source-community-tab" ? "community" : "local");
+  });
+});
+
+uploadControl.addEventListener("click", () => {
+  selectFirmwareSource(allowLocalFirmwareUpload ? "local" : "community");
+  firmwareGuidance.showModal();
+});
+
+async function importCommunityFirmware() {
+  if (!communityPlayUrl.reportValidity()) return;
+  const operation = beginFirmwareOperation();
+  const previousFirmwareName = activeFirmwareName;
+  const previousRuntimeState = currentRuntimeState;
+  const previousRuntimeDetail = runtimeState.textContent;
+  const previousPendingPresetId = pendingPresetId;
+
+  try {
+    pendingPresetId = null;
+    setUploadBusy(true);
+    confirmFirmwareUpload.textContent = "正在导入…";
+    setRuntimeState("loading", "正在读取社区固件");
+    resetScreenOverlay();
+    setLoadingProgress(5, "正在连接 FoloToy 社区", "请求玩法固件");
+    presetFeedback.textContent = "正在导入社区固件";
+    renderPresetStates();
+
+    const response = await fetch("/api/community-firmware", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: communityPlayUrl.value.trim() }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error || `社区固件请求失败: ${response.status}`);
+    }
+
+    const firmware = await readFirmwareResponse(response, "社区固件");
+    if (!firmwareOperations.isCurrent(operation)) return;
+    let firmwareName = response.headers.get("x-firmware-name") || "社区固件";
+    try {
+      firmwareName = decodeURIComponent(firmwareName);
+    } catch {
+      firmwareName = "社区固件";
+    }
+    setLoadingProgress(62, "正在校验固件", `${firmwareName} · ${formatFirmwareSize(firmware.byteLength)}`);
+    validateFirmwareFile({ name: `${firmwareName}.bin`, size: firmware.byteLength });
+    activeFirmwareName = firmwareName;
+    firmwareGuidance.close();
+    log(`导入 ${firmwareName} (${formatFirmwareSize(firmware.byteLength)})`);
+    await runtime.loadFirmware(firmware);
+  } catch (error) {
+    if (!firmwareOperations.isCurrent(operation)) return;
+    pendingPresetId = previousPendingPresetId;
+    activeFirmwareName = previousFirmwareName;
+    setUploadBusy(false);
+    setRuntimeState(previousRuntimeState, previousRuntimeDetail);
+    confirmFirmwareUpload.textContent = "导入并运行";
+    uploadError.textContent = error.message;
+    presetFeedback.textContent = `社区固件导入失败：${error.message}`;
+    renderPresetStates();
+    log(`社区固件导入失败：${error.message}`);
+    if (!firmwareGuidance.open) firmwareGuidance.showModal();
+  }
+}
+
+confirmFirmwareUpload.addEventListener("click", async () => {
+  if (selectedFirmwareSource === "community") {
+    await importCommunityFirmware();
+    return;
+  }
+  if (!allowLocalFirmwareUpload) {
+    selectFirmwareSource("community");
+    uploadError.textContent = "当前部署不允许加载本地固件";
+    return;
+  }
+  firmwareGuidance.close();
+  firmwareInput.click();
+});
+communityPlayUrl.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  importCommunityFirmware();
+});
+firmwareInput.addEventListener("change", async () => {
+  const [file] = firmwareInput.files;
+  firmwareInput.value = "";
+  if (!allowLocalFirmwareUpload) return;
+  if (!file) return;
+
+  const operation = beginFirmwareOperation();
+  const previousFirmwareName = activeFirmwareName;
+  const previousRuntimeState = currentRuntimeState;
+  const previousRuntimeDetail = runtimeState.textContent;
+  try {
+    validateFirmwareFile(file);
+    pendingPresetId = null;
+    activeFirmwareName = file.name;
+    setUploadBusy(true);
+    setRuntimeState("loading", `正在读取 ${file.name}`);
+    resetScreenOverlay();
+    setLoadingProgress(5, "正在校验本地固件", `${formatFirmwareSize(file.size)} · ${file.name}`);
+    presetFeedback.textContent = `正在加载本地固件 ${file.name}`;
+    renderPresetStates();
+    log(`加载 ${file.name} (${formatFirmwareSize(file.size)})`);
+    const firmware = await readLocalFirmware(file);
+    if (!firmwareOperations.isCurrent(operation)) return;
+    await runtime.loadFirmware(firmware);
+  } catch (error) {
+    if (!firmwareOperations.isCurrent(operation)) return;
+    pendingPresetId = undefined;
+    activeFirmwareName = previousFirmwareName;
+    setUploadBusy(false);
+    setRuntimeState(previousRuntimeState, previousRuntimeDetail);
+    presetFeedback.textContent = `本地固件加载失败：${error.message}`;
+    renderPresetStates();
+    log(error.message);
+    uploadError.textContent = error.message;
+    firmwareGuidance.showModal();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && fullscreenFallback) {
+    event.preventDefault();
+    exitSimulatorFullscreen().then(() => fullscreenToggle.focus());
+    return;
+  }
+  if (event.key === "Escape" && inspectorPanel.classList.contains("is-open")) {
+    event.preventDefault();
+    setInspectorOpen(false);
+    return;
+  }
+  if (event.target.closest("input, select, button")) return;
+  const keys = { ArrowUp: "UP", ArrowDown: "DOWN", Enter: "OK", p: "POWER", P: "POWER" };
+  const key = keys[event.key];
+  if (!key) return;
+  event.preventDefault();
+  if (event.repeat) return;
+  if (heldKeyboardButtons.has(key)) return;
+  heldKeyboardButtons.add(key);
+  startButtonPress(key);
+});
+document.addEventListener("keyup", (event) => {
+  const keys = { ArrowUp: "UP", ArrowDown: "DOWN", Enter: "OK", p: "POWER", P: "POWER" };
+  const key = keys[event.key];
+  if (!key || !heldKeyboardButtons.delete(key)) return;
+  event.preventDefault();
+  finishButtonPress(key);
+});
+window.addEventListener("blur", () => {
+  for (const key of heldPointerButtons) finishButtonPress(key, true);
+  heldPointerButtons.clear();
+  for (const key of heldKeyboardButtons) finishButtonPress(key, true);
+  heldKeyboardButtons.clear();
+});
+
+buildRegisterGrid();
+renderUartConsole();
+resetNetworkView();
+setRuntimeState("waiting", "等待运行时");
+clearDisplay();
+renderPresetStates();
+
+async function startApplication() {
+  await configureFirmwareSources();
+  showSimulatorNoticeOnce(simulatorNotice);
+  try {
+    const initialCommunityPlayUrl = resolveCommunityPlayUrl(window.location.search);
+    if (initialCommunityPlayUrl) {
+      selectFirmwareSource("community");
+      communityPlayUrl.value = initialCommunityPlayUrl;
+      await importCommunityFirmware();
+      return;
+    }
+  } catch (error) {
+    selectFirmwareSource("community");
+    uploadError.textContent = error.message;
+    presetFeedback.textContent = `社区固件导入失败：${error.message}`;
+    log(`社区固件导入失败：${error.message}`);
+    if (!firmwareGuidance.open) firmwareGuidance.showModal();
+    return;
+  }
+
+  const operation = beginFirmwareOperation();
+  runtime.start(initialPresetButton.dataset.firmwareUrl).catch((error) => {
+    if (!firmwareOperations.isCurrent(operation)) return;
+    setUploadBusy(false);
+    setRuntimeState("waiting", "等待 WASM QEMU");
+    overlay.classList.add("is-error");
+    loadingProgress.setAttribute("aria-invalid", "true");
+    setLoadingProgress(
+      loadingProgress.getAttribute("aria-valuenow"),
+      "运行时未就绪",
+      "请检查 /public/wasm/manifest.json",
+    );
+    log(error.message);
+  });
+}
+
+startApplication();

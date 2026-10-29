@@ -22,7 +22,7 @@ enum SnapshotDriver {
         await shoot(ContentView(), app: app, community: community, size: CGSize(width: 1280, height: 1380), to: dir, name: "01-community")
 
         if let play = community.featured.first(where: \.isInstallable) ?? community.plays.first {
-            await shoot(PlayDetailView(play: play) {}, app: app, community: community, size: CGSize(width: 760, height: 620), to: dir, name: "02-play-detail")
+            await shoot(PlayDetailView(play: play) {}, app: app, community: community, size: CGSize(width: 900, height: 680), to: dir, name: "02-play-detail")
         }
 
         app.clearPlan()
@@ -58,6 +58,8 @@ enum SnapshotDriver {
         await shoot(ContentView(), app: app, community: community, size: CGSize(width: 1280, height: 860), to: dir, name: "07-factory-restore")
         app.tab = .about
         await shoot(ContentView(), app: app, community: community, size: CGSize(width: 1280, height: 860), to: dir, name: "08-about", settle: 15)
+        app.tab = .simulator
+        await shoot(ContentView(), app: app, community: community, size: CGSize(width: 1280, height: 900), to: dir, name: "09-simulator", settle: 18)
 
         NSApp.terminate(nil)
     }
