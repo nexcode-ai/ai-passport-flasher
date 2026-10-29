@@ -111,6 +111,7 @@ enum SnapshotDriver {
         }
         await sleep(16)
         if let controller = SimulatorWebController.active {
+            await controller.setSnapshotNeutral(true)
             await captureSimulator(
                 window: window,
                 controller: controller,
@@ -118,6 +119,7 @@ enum SnapshotDriver {
             )
             await controller.captureDevice(to: dir.appendingPathComponent("real-simulator-buttons.png"))
             log("captured real-simulator-buttons.png")
+            await controller.setSnapshotNeutral(false)
         } else {
             await capture(window: window, to: dir.appendingPathComponent("real-simulator.png"))
         }

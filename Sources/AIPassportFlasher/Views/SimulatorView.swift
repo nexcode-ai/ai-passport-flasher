@@ -760,6 +760,13 @@ final class SimulatorWebController: ObservableObject {
         await snapshot(configuration: nil)
     }
 
+    func setSnapshotNeutral(_ enabled: Bool) async {
+        guard let webView else { return }
+        _ = try? await webView.evaluateJavaScript(
+            "document.body.classList.toggle('apf-snapshot-neutral', \(enabled ? "true" : "false"))"
+        )
+    }
+
     private func snapshot(configuration: WKSnapshotConfiguration?) async -> NSImage? {
         guard let webView else { return nil }
         return await withCheckedContinuation { continuation in
@@ -1163,11 +1170,11 @@ enum SimulatorBridgeScript {
             button.classList.add('apf-long-ready');
             setTimeout(() => {
               button.classList.remove('apf-long-ready');
-              const path = button.querySelector('.apf-hold-ring rect');
+              const path = button.querySelector('.apf-hold-ring circle');
               if (path) path.style.strokeDashoffset = '1';
             }, 260);
           } else {
-            const path = button.querySelector('.apf-hold-ring rect');
+            const path = button.querySelector('.apf-hold-ring circle');
             if (path) path.style.strokeDashoffset = '1';
           }
         };
@@ -1175,7 +1182,7 @@ enum SimulatorBridgeScript {
           const visual = keyVisuals[key];
           const button = keyButtons.get(key);
           if (!button || !visual || !visual.hold || activeHolds.has(key)) return;
-          const path = button.querySelector('.apf-hold-ring rect');
+          const path = button.querySelector('.apf-hold-ring circle');
           const started = performance.now();
           button.classList.remove('apf-long-ready');
           button.classList.add('apf-holding');
@@ -1213,14 +1220,12 @@ enum SimulatorBridgeScript {
           if (visual.hold) {
             const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             ring.classList.add('apf-hold-ring');
-            ring.setAttribute('viewBox', '0 0 32 48');
+            ring.setAttribute('viewBox', '0 0 32 32');
             ring.setAttribute('aria-hidden', 'true');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            path.setAttribute('x', '2');
-            path.setAttribute('y', '2');
-            path.setAttribute('width', '28');
-            path.setAttribute('height', '44');
-            path.setAttribute('rx', '14');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            path.setAttribute('cx', '16');
+            path.setAttribute('cy', '16');
+            path.setAttribute('r', '14');
             path.setAttribute('pathLength', '1');
             ring.append(path);
             button.append(ring);
@@ -1313,10 +1318,11 @@ enum SimulatorTheme {
       pointer-events: none !important;
     }
     .hardware-key.apf-physical-key {
-      width: 3.9% !important;
-      min-width: 28px !important;
-      height: 5.2% !important;
-      min-height: 28px !important;
+      width: clamp(36px, 5.2%, 42px) !important;
+      min-width: 36px !important;
+      height: auto !important;
+      min-height: 36px !important;
+      aspect-ratio: 1 / 1 !important;
       padding: 0 !important;
       overflow: visible !important;
       pointer-events: auto !important;
@@ -1327,7 +1333,7 @@ enum SimulatorTheme {
       background: transparent !important;
       box-shadow: none !important;
       text-shadow: none !important;
-      transform: translateY(0) scale(1) !important;
+      transform: translate(-50%, -50%) scale(1) !important;
       transition:
         transform .10s cubic-bezier(.2, .8, .2, 1),
         border-color .15s ease,
@@ -1357,13 +1363,13 @@ enum SimulatorTheme {
       display: grid;
       place-items: center;
       color: rgba(247, 251, 249, .90);
-      font: 650 clamp(6px, .72vw, 8px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+      font: 650 clamp(8px, .92vw, 10.5px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
       letter-spacing: -.025em !important;
       text-shadow: 0 1px 2px rgba(0, 0, 0, .58);
       pointer-events: none;
     }
     .hardware-key.apf-physical-key.key-power .apf-key-label {
-      font-size: clamp(5px, .58vw, 6.5px) !important;
+      font-size: clamp(7px, .72vw, 8.5px) !important;
       letter-spacing: -.04em !important;
     }
     .hardware-key.apf-physical-key .apf-hold-ring {
@@ -1377,7 +1383,7 @@ enum SimulatorTheme {
       filter: drop-shadow(0 0 2px rgba(32, 228, 124, .45));
       transition: opacity .12s ease;
     }
-    .hardware-key.apf-physical-key .apf-hold-ring rect {
+    .hardware-key.apf-physical-key .apf-hold-ring circle {
       fill: none;
       stroke: #20E47C;
       stroke-width: 1.5;
@@ -1405,9 +1411,26 @@ enum SimulatorTheme {
         inset -1px -2px 3px rgba(0, 0, 0, .24),
         0 0 7px rgba(32, 228, 124, .22);
     }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:hover {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:hover .apf-key-face {
+      border-color: rgba(231, 241, 238, .34);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .03) 36%, transparent 54%),
+        rgba(12, 17, 19, .58) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .34),
+        0 2px 4px rgba(0, 0, 0, .26);
+    }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:focus-visible {
+      outline: none !important;
+    }
     .hardware-key.apf-physical-key:active,
     .hardware-key.apf-physical-key.is-pressed {
-      transform: translateY(1px) scale(.94) !important;
+      transform: translate(-50%, calc(-50% + 1px)) scale(.94) !important;
       background: transparent !important;
       box-shadow: none !important;
     }
@@ -1431,15 +1454,15 @@ enum SimulatorTheme {
     .hardware-key.apf-physical-key.key-up,
     .hardware-key.apf-physical-key.key-down,
     .hardware-key.apf-physical-key.key-ok {
-      left: 73% !important;
+      left: 73.5% !important;
     }
-    .hardware-key.apf-physical-key.key-up { top: 17.1% !important; }
-    .hardware-key.apf-physical-key.key-down { top: 36.8% !important; }
-    .hardware-key.apf-physical-key.key-ok { top: 55.8% !important; }
+    .hardware-key.apf-physical-key.key-up { top: 21.3% !important; }
+    .hardware-key.apf-physical-key.key-down { top: 35.5% !important; }
+    .hardware-key.apf-physical-key.key-ok { top: 48.8% !important; }
     .hardware-key.apf-physical-key.key-power {
-      left: 27.2% !important;
-      top: 17.1% !important;
-      width: 4.1% !important;
+      left: 25.9% !important;
+      top: 22% !important;
+      width: clamp(36px, 5.4%, 42px) !important;
     }
     """
 }
