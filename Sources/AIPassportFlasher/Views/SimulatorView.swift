@@ -229,7 +229,7 @@ struct SimulatorFailureView: View {
                     .buttonStyle(PrimaryButtonStyle())
                 Link("安装 Node.js 20 或更高版本", destination: URL(string: "https://nodejs.org/zh-cn/download")!)
             }
-            Text("模拟器运行时来自 VOID001/FoloToy-Passport-Simulator（MIT），仅监听本机 127.0.0.1。")
+            Text("模拟器运行时来自 VOID001/FoloToy-Passport-Simulator（MIT），仅监听本机 localhost。")
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .padding(32)
@@ -317,13 +317,13 @@ final class SimulatorHost: ObservableObject {
     }
 
     private func waitUntilReady() async {
-        let url = URL(string: "http://127.0.0.1:\(port)/healthz")!
+        let url = URL(string: "http://localhost:\(port)/healthz")!
         for _ in 0..<60 {
             guard process != nil else { return }
             do {
                 let (_, response) = try await URLSession.shared.data(from: url)
                 if (response as? HTTPURLResponse)?.statusCode == 200 {
-                    state = .ready(URL(string: "http://127.0.0.1:\(port)/")!)
+                    state = .ready(URL(string: "http://localhost:\(port)/")!)
                     return
                 }
             } catch {}
@@ -358,15 +358,13 @@ struct SimulatorWebView: NSViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
-        context.coordinator.lastURL = url
-        webView.load(URLRequest(url: url))
+        context.coordinator.load(url, in: webView)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         guard context.coordinator.lastURL != url else { return }
-        context.coordinator.lastURL = url
-        webView.load(URLRequest(url: url))
+        context.coordinator.load(url, in: webView)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
@@ -375,6 +373,42 @@ struct SimulatorWebView: NSViewRepresentable {
 
         init(onError: @escaping (String) -> Void) {
             self.onError = onError
+        }
+
+        func load(_ url: URL, in webView: WKWebView) {
+            lastURL = url
+            Task {
+                do {
+                    let (data, response) = try await URLSession.shared.data(from: url)
+                    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                        throw URLError(.badServerResponse)
+                    }
+                    let html = String(decoding: data, as: UTF8.self)
+                    await MainActor.run {
+                        guard self.lastURL == url else { return }
+                        webView.loadHTMLString(html, baseURL: url)
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.onError("模拟器页面加载失败：\(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let destination = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+            let allowed = destination.scheme == "about"
+                || destination.scheme == "https"
+                || (destination.scheme == "http" && destination.host == "localhost")
+            decisionHandler(allowed ? .allow : .cancel)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
