@@ -78,14 +78,14 @@ struct CommunityView: View {
                     HeroFeaturedCard(play: hero, onDetail: { app.detailPlay = hero })
                 }
                 if store.featured.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(alignment: .top, spacing: 16) {
-                            ForEach(Array(store.featured.dropFirst().prefix(8))) { play in
-                                FeaturedCard(play: play, onDetail: { app.detailPlay = play })
-                            }
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 270, maximum: 360), spacing: Space.m)],
+                        alignment: .leading,
+                        spacing: Space.m
+                    ) {
+                        ForEach(Array(store.featured.dropFirst().prefix(6))) { play in
+                            FeaturedCard(play: play, onDetail: { app.detailPlay = play })
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 2)
                     }
                 }
             }
@@ -418,35 +418,55 @@ struct PlayCard: View {
 }
 
 struct FeaturedCard: View {
+    @EnvironmentObject var app: AppState
     let play: Play
     let onDetail: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 0) {
             CoverImage(url: play.thumbnailURL)
-                .frame(width: 214, height: 268)
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(alignment: .topLeading) { Tag(text: play.categoryLabel, tint: .white, onDark: true).padding(10) }
-                .onTapGesture(perform: onDetail)
-            Text(play.title.display).font(.headline.weight(.semibold)).lineLimit(1)
-            Text("开发者 \(play.author ?? "—")").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            Text(play.description?.display ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                .frame(height: 30, alignment: .top)
-            HStack {
-                Button(action: onDetail) {
-                    Label("详情", systemImage: "info.circle")
+                .frame(maxWidth: .infinity)
+                .frame(height: 164)
+                .clipped()
+                .overlay {
+                    LinearGradient(colors: [.clear, .black.opacity(0.16)], startPoint: .center, endPoint: .bottom)
                 }
-                .buttonStyle(.app(.tertiary, size: .small))
-                Spacer()
-                InstallButton(play: play, compact: true)
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 6) {
+                        Tag(text: play.categoryLabel, tint: .white, onDark: true)
+                        if play.mustPlay == true { Tag(text: "必玩", tint: .white, onDark: true) }
+                    }
+                    .padding(Space.s)
+                }
+                .onTapGesture(perform: onDetail)
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text(play.title.display).font(.cardTitle).lineLimit(1)
+                Text("开发者 \(play.author ?? "—")").font(.meta).foregroundStyle(.secondary).lineLimit(1)
+                Text(play.description?.display ?? "")
+                    .font(.bodyText)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(height: 34, alignment: .top)
+                HStack(spacing: Space.xs) {
+                    Stats(play: play)
+                    Spacer(minLength: 4)
+                    IconButton(symbol: "gamecontroller", help: "先试用", size: .small) {
+                        SimulatorSession.shared.tryPlay(play, app: app)
+                    }
+                    Button(action: onDetail) {
+                        Label("详情", systemImage: "info.circle")
+                    }
+                    .buttonStyle(.app(.tertiary, size: .small))
+                    InstallButton(play: play, compact: true)
+                }
             }
+            .padding(Space.m)
         }
-        .frame(width: 214)
-        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .card(radius: Radius.card, hovering: hovering)
-        .offset(y: hovering ? -3 : 0)
+        .offset(y: hovering ? -2 : 0)
         .animation(.easeOut(duration: 0.18), value: hovering)
         .onHover { hovering = $0 }
     }
@@ -455,11 +475,11 @@ struct FeaturedCard: View {
 struct FeaturedCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)).frame(width: 214, height: 268)
+            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)).frame(height: 164)
             RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)).frame(width: 120, height: 12)
             RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.10)).frame(width: 80, height: 10)
         }
-        .padding(10)
+        .padding(Space.m)
         .modernCard(padding: 0)
     }
 }

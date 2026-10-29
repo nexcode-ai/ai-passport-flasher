@@ -43,8 +43,8 @@ enum Radius {
     static let control: CGFloat = 8
     static let field: CGFloat = 10
     static let inset: CGFloat = 12
-    static let card: CGFloat = 14
-    static let hero: CGFloat = 20
+    static let card: CGFloat = 16
+    static let hero: CGFloat = 24
 }
 
 extension NSColor {
@@ -61,9 +61,9 @@ extension Color {
 }
 
 extension Font {
-    static let pageTitle = Font.system(size: 26, weight: .bold)
-    static let heroTitle = Font.system(size: 24, weight: .bold)
-    static let sectionTitle = Font.system(size: 18, weight: .semibold)
+    static let pageTitle = Font.system(size: 28, weight: .bold)
+    static let heroTitle = Font.system(size: 26, weight: .bold)
+    static let sectionTitle = Font.system(size: 19, weight: .semibold)
     static let cardTitle = Font.system(size: 15, weight: .semibold)
     static let bodyText = Font.system(size: 13)
     static let meta = Font.system(size: 11.5)
@@ -126,12 +126,27 @@ extension Page where Accessory == EmptyView {
 
 struct PageBackground: View {
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack {
             Color(nsColor: .windowBackgroundColor)
-            RadialGradient(colors: [Brand.accent.opacity(0.08), .clear], center: .topLeading, startRadius: 0, endRadius: 560)
-                .frame(height: 520)
-                .allowsHitTesting(false)
+            LinearGradient(
+                colors: [Brand.accent.opacity(0.055), .clear, Color.cyan.opacity(0.025)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [Brand.accent.opacity(0.10), .clear],
+                center: UnitPoint(x: 0.12, y: 0.02),
+                startRadius: 0,
+                endRadius: 520
+            )
+            RadialGradient(
+                colors: [Color.cyan.opacity(0.055), .clear],
+                center: UnitPoint(x: 0.92, y: 0.28),
+                startRadius: 0,
+                endRadius: 430
+            )
         }
+        .allowsHitTesting(false)
         .ignoresSafeArea()
     }
 }
@@ -196,8 +211,8 @@ struct CardStyle: ViewModifier {
             .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Brand.surface))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(hovering ? Brand.accent.opacity(0.35) : Brand.hairline))
-            .shadow(color: .black.opacity(elevated || hovering ? 0.13 : 0.05),
-                    radius: elevated || hovering ? 16 : 5, y: elevated || hovering ? 8 : 2)
+            .shadow(color: .black.opacity(elevated || hovering ? 0.13 : 0.045),
+                    radius: elevated || hovering ? 18 : 7, y: elevated || hovering ? 9 : 3)
     }
 }
 

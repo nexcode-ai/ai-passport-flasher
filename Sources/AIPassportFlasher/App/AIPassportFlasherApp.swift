@@ -12,7 +12,7 @@ struct AIPassportFlasherApp: App {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(community)
-                .frame(minWidth: 1020, minHeight: 700)
+                .frame(minWidth: 1100, minHeight: 720)
                 .tint(AppTheme.accent)
         }
         .defaultSize(width: 1240, height: 860)
@@ -46,42 +46,38 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                HStack(spacing: 11) {
-                    Image(systemName: "sparkles.rectangle.stack.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(AppTheme.accent.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .shadow(color: AppTheme.accent.opacity(0.22), radius: 8, y: 3)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("AI Passport").font(.headline)
-                        Text("刷机工具").font(.caption).foregroundStyle(.secondary)
+                sidebarBrand
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Space.l) {
+                        sidebarSection("开始") {
+                            SidebarNavigationRow(tab: .community, title: "发现玩法")
+                            SidebarNavigationRow(tab: .simulator, title: "玩法模拟器")
+                        }
+                        sidebarSection("我的设备") {
+                            SidebarNavigationRow(tab: .flash, title: "安装到设备")
+                            SidebarNavigationRow(tab: .restore, title: "恢复设备")
+                        }
+                        sidebarSection("支持") {
+                            SidebarNavigationRow(tab: .about, title: "关于")
+                        }
                     }
-                    Spacer()
+                    .padding(.horizontal, Space.s)
+                    .padding(.vertical, Space.xs)
+                    .overlayScrollers()
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
-
-                List(selection: Binding(get: { app.tab }, set: { if let t = $0 { app.tab = t } })) {
-                    Section("开始") {
-                        sidebarRow(.community, title: "发现玩法")
-                        sidebarRow(.simulator, title: "玩法模拟器")
-                    }
-                    Section("我的设备") {
-                        sidebarRow(.flash, title: "安装到设备")
-                        sidebarRow(.restore, title: "恢复设备")
-                    }
-                    Section {
-                        sidebarRow(.about, title: "关于")
-                    }
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
                 sidebarFooter
             }
-            .background(.ultraThinMaterial)
-            .navigationSplitViewColumnWidth(min: 210, ideal: 220)
+            .background(
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    LinearGradient(
+                        colors: [Brand.accent.opacity(0.08), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                }
+            )
+            .navigationSplitViewColumnWidth(min: 228, ideal: 240, max: 260)
         } detail: {
             Group {
                 switch app.tab {
@@ -105,17 +101,31 @@ struct ContentView: View {
         }
     }
 
-    private func sidebarRow(_ tab: SidebarTab, title: String) -> some View {
-        HStack(spacing: 11) {
-            Image(systemName: tab.symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(app.tab == tab ? AppTheme.accent : .secondary)
-                .frame(width: 24, height: 24)
-            Text(title).font(.callout.weight(app.tab == tab ? .semibold : .medium))
+    private var sidebarBrand: some View {
+        HStack(spacing: Space.s) {
+            IconTile(symbol: "sparkles.rectangle.stack.fill", size: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI Passport").font(.system(size: 15, weight: .bold))
+                Text("探索 · 试用 · 安装")
+                    .font(.meta)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
         }
-        .padding(.vertical, 5)
-        .tag(tab)
+        .padding(.horizontal, Space.m)
+        .padding(.top, Space.l)
+        .padding(.bottom, Space.m)
+    }
+
+    private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Space.xxs) {
+            Text(title.uppercased())
+                .font(.eyebrow)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Space.xs)
+                .padding(.bottom, 2)
+            content()
+        }
     }
 
     private var sidebarFooter: some View {
@@ -133,8 +143,56 @@ struct ContentView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Brand.surface.opacity(0.72), in: RoundedRectangle(cornerRadius: Radius.inset, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.inset, style: .continuous).strokeBorder(Brand.hairline))
         .padding(12)
+    }
+}
+
+private struct SidebarNavigationRow: View {
+    @EnvironmentObject private var app: AppState
+    let tab: SidebarTab
+    let title: String
+    @State private var hovering = false
+
+    var body: some View {
+        let selected = app.tab == tab
+        Button {
+            app.tab = tab
+        } label: {
+            HStack(spacing: Space.s) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selected ? Brand.accent : Color.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                            .fill(selected ? Brand.surfaceRaised : Color.primary.opacity(hovering ? 0.07 : 0.04))
+                    )
+                Text(title)
+                    .font(.system(size: 13.5, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if selected {
+                    Circle().fill(Brand.accent).frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, Space.xs)
+            .frame(height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.inset, style: .continuous)
+                    .fill(selected ? Brand.accentSoft : Color.primary.opacity(hovering ? 0.045 : 0))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.inset, style: .continuous)
+                    .strokeBorder(selected ? Brand.accent.opacity(0.20) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: hovering)
+        .animation(.easeOut(duration: 0.14), value: selected)
     }
 }
 
