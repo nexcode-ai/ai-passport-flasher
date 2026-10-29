@@ -1145,10 +1145,10 @@ enum SimulatorBridgeScript {
           shell.appendChild(content);
         }
         const keyVisuals = {
-          POWER: { title: '电源 · P · 长按 2 秒', hold: 2000 },
-          UP: { title: '向上 · 键盘 ↑', hold: 0 },
-          DOWN: { title: '向下 · 键盘 ↓', hold: 0 },
-          OK: { title: '确认 · Return · 长按 0.5 秒', hold: 500 },
+          POWER: { label: 'POWER', title: '电源 · P · 长按 2 秒', hold: 2000 },
+          UP: { label: 'UP', title: '向上 · 键盘 ↑', hold: 0 },
+          DOWN: { label: 'DOWN', title: '向下 · 键盘 ↓', hold: 0 },
+          OK: { label: 'OK', title: '确认 · Return · 长按 0.5 秒', hold: 500 },
         };
         const keyButtons = new Map();
         const activeHolds = new Map();
@@ -1205,7 +1205,10 @@ enum SimulatorBridgeScript {
 
           const face = document.createElement('span');
           face.className = 'apf-key-face';
-          button.append(face);
+          const label = document.createElement('span');
+          label.className = 'apf-key-label';
+          label.textContent = visual.label;
+          button.append(face, label);
 
           if (visual.hold) {
             const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1318,9 +1321,9 @@ enum SimulatorTheme {
       overflow: visible !important;
       pointer-events: auto !important;
       appearance: none !important;
-      border: 1px solid transparent !important;
-      border-radius: 42% !important;
-      color: transparent !important;
+      border: 0 !important;
+      border-radius: 50% !important;
+      color: rgba(244, 249, 247, .90) !important;
       background: transparent !important;
       box-shadow: none !important;
       text-shadow: none !important;
@@ -1333,12 +1336,35 @@ enum SimulatorTheme {
     }
     .hardware-key.apf-physical-key .apf-key-face {
       position: absolute;
-      inset: 1px;
+      inset: 0;
       border-radius: inherit;
-      background: transparent !important;
-      box-shadow: none;
+      border: 1px solid rgba(231, 241, 238, .34);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .03) 36%, transparent 54%),
+        rgba(12, 17, 19, .58) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .34),
+        0 2px 4px rgba(0, 0, 0, .26);
+      backdrop-filter: blur(3px) brightness(.90);
       pointer-events: none;
-      transition: background .15s ease, box-shadow .15s ease;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .hardware-key.apf-physical-key .apf-key-label {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      color: rgba(247, 251, 249, .90);
+      font: 650 clamp(6px, .72vw, 8px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+      letter-spacing: -.025em !important;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .58);
+      pointer-events: none;
+    }
+    .hardware-key.apf-physical-key.key-power .apf-key-label {
+      font-size: clamp(5px, .58vw, 6.5px) !important;
+      letter-spacing: -.04em !important;
     }
     .hardware-key.apf-physical-key .apf-hold-ring {
       position: absolute;
@@ -1366,27 +1392,37 @@ enum SimulatorTheme {
       opacity: 1;
     }
     .hardware-key.apf-physical-key:hover {
-      border-color: rgba(32, 228, 124, .58) !important;
-      background: rgba(32, 228, 124, .055) !important;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, .16),
-        0 0 8px rgba(32, 228, 124, .20) !important;
+      background: transparent !important;
+      box-shadow: none !important;
     }
     .hardware-key.apf-physical-key:hover .apf-key-face {
-      background: linear-gradient(90deg, rgba(255, 255, 255, .10), transparent 48%) !important;
+      border-color: rgba(32, 228, 124, .62);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .20), transparent 52%),
+        rgba(20, 52, 37, .66) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .24),
+        0 0 7px rgba(32, 228, 124, .22);
     }
     .hardware-key.apf-physical-key:active,
     .hardware-key.apf-physical-key.is-pressed {
       transform: translateY(1px) scale(.94) !important;
-      border-color: rgba(32, 228, 124, .72) !important;
-      background: rgba(7, 12, 10, .18) !important;
-      box-shadow:
-        inset 0 2px 4px rgba(0, 0, 0, .38),
-        0 0 6px rgba(32, 228, 124, .16) !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    .hardware-key.apf-physical-key:active .apf-key-face,
+    .hardware-key.apf-physical-key.is-pressed .apf-key-face {
+      border-color: rgba(32, 228, 124, .68);
+      background: rgba(5, 10, 8, .26) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, .44), 0 0 5px rgba(32, 228, 124, .15);
     }
     .hardware-key.apf-physical-key.apf-long-ready {
-      border-color: rgba(32, 228, 124, .78) !important;
-      box-shadow: 0 0 9px rgba(32, 228, 124, .30) !important;
+      box-shadow: none !important;
+    }
+    .hardware-key.apf-physical-key.apf-long-ready .apf-key-face {
+      border-color: rgba(32, 228, 124, .72);
+      box-shadow: 0 0 7px rgba(32, 228, 124, .24);
     }
     .hardware-key.apf-physical-key:focus-visible {
       outline: 2px solid #20E47C !important;
