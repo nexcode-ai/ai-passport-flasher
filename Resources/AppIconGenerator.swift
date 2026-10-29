@@ -4,6 +4,7 @@ import CoreGraphics
 private let fileManager = FileManager.default
 private let root = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
 private let iconset = root.appendingPathComponent("Resources/AppIcon.iconset", isDirectory: true)
+private let assetIconset = root.appendingPathComponent("Resources/Assets.xcassets/AppIcon.appiconset", isDirectory: true)
 private let icns = root.appendingPathComponent("Resources/AppIcon.icns")
 private let preview = root.appendingPathComponent("screenshots/app-icon.png")
 
@@ -210,11 +211,13 @@ private func drawIcon(pixels: Int) throws -> Data {
 
 try? fileManager.removeItem(at: iconset)
 try fileManager.createDirectory(at: iconset, withIntermediateDirectories: true)
+try fileManager.createDirectory(at: assetIconset, withIntermediateDirectories: true)
 try fileManager.createDirectory(at: preview.deletingLastPathComponent(), withIntermediateDirectories: true)
 
 for target in targets {
     let png = try drawIcon(pixels: target.pixels)
     try png.write(to: iconset.appendingPathComponent(target.filename), options: .atomic)
+    try png.write(to: assetIconset.appendingPathComponent(target.filename), options: .atomic)
     if target.pixels == 1024 {
         try png.write(to: preview, options: .atomic)
     }
