@@ -1,0 +1,10 @@
+{
+  "background" : "rgb(9, 12, 16)",
+  "bundleNode" : "\/Applications\/AIPassportFlasher.app\/Contents\/Resources\/node\/node",
+  "display" : "grid",
+  "ready" : "interactive",
+  "root" : true,
+  "scripts" : 1,
+  "styles" : 1,
+  "url" : "apf-simulator:\/\/runtime\/"
+}

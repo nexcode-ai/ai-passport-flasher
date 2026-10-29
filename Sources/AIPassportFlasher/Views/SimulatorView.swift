@@ -227,9 +227,8 @@ struct SimulatorFailureView: View {
             HStack(spacing: 10) {
                 Button("重试", action: retry)
                     .buttonStyle(PrimaryButtonStyle())
-                Link("安装 Node.js 20 或更高版本", destination: URL(string: "https://nodejs.org/zh-cn/download")!)
             }
-            Text("模拟器运行时来自 VOID001/FoloToy-Passport-Simulator（MIT），仅监听本机 localhost。")
+            Text("模拟器与运行时已内置于应用（MIT），仅监听本机，不需要安装额外软件。")
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .padding(32)
@@ -260,7 +259,7 @@ final class SimulatorHost: ObservableObject {
             return
         }
         guard let nodeURL = nodeExecutable() else {
-            state = .failed("这台 Mac 尚未安装 Node.js 20 或更高版本。安装后点击“重试”即可。")
+            state = .failed("应用包中的模拟器运行时不完整，请重新安装应用。")
             return
         }
 
@@ -317,13 +316,13 @@ final class SimulatorHost: ObservableObject {
     }
 
     private func waitUntilReady() async {
-        let url = URL(string: "http://localhost:\(port)/healthz")!
+        let url = URL(string: "http://127.0.0.1:\(port)/healthz")!
         for _ in 0..<60 {
             guard process != nil else { return }
             do {
                 let (_, response) = try await URLSession.shared.data(from: url)
                 if (response as? HTTPURLResponse)?.statusCode == 200 {
-                    state = .ready(URL(string: "http://localhost:\(port)/")!)
+                    state = .ready(URL(string: "http://127.0.0.1:\(port)/")!)
                     return
                 }
             } catch {}
@@ -333,13 +332,90 @@ final class SimulatorHost: ObservableObject {
     }
 
     private func nodeExecutable() -> URL? {
-        let candidates = [
-            "/usr/local/bin/node",
-            "/opt/homebrew/bin/node",
-            "/usr/bin/node",
-        ]
-        return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-            .map { URL(fileURLWithPath: $0) }
+        guard let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("node")
+            .appendingPathComponent("node"),
+              FileManager.default.isExecutableFile(atPath: bundled.path) else {
+            return nil
+        }
+        return bundled
+    }
+}
+
+final class SimulatorSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let lock = NSLock()
+    private var tasks: [ObjectIdentifier: URLSessionDataTask] = [:]
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let sourceURL = urlSchemeTask.request.url,
+              var components = URLComponents(
+                url: sourceURL,
+                resolvingAgainstBaseURL: false
+              ) else {
+            urlSchemeTask.didFailWithError(URLError(.badURL))
+            return
+        }
+
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = 4190
+        guard let targetURL = components.url else {
+            urlSchemeTask.didFailWithError(URLError(.badURL))
+            return
+        }
+
+        var request = URLRequest(url: targetURL)
+        request.httpMethod = urlSchemeTask.request.httpMethod
+        request.httpBody = urlSchemeTask.request.httpBody
+        request.allHTTPHeaderFields = urlSchemeTask.request.allHTTPHeaderFields
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self, self.removeTask(identifier) else { return }
+            if let error {
+                urlSchemeTask.didFailWithError(error)
+                return
+            }
+            guard let backend = response as? HTTPURLResponse else {
+                urlSchemeTask.didFailWithError(URLError(.badServerResponse))
+                return
+            }
+            var headers: [String: String] = [:]
+            for (key, value) in backend.allHeaderFields {
+                headers[String(describing: key)] = String(describing: value)
+            }
+            guard let proxyResponse = HTTPURLResponse(
+                url: sourceURL,
+                statusCode: backend.statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: headers
+            ) else {
+                urlSchemeTask.didFailWithError(URLError(.badServerResponse))
+                return
+            }
+            urlSchemeTask.didReceive(proxyResponse)
+            if let data { urlSchemeTask.didReceive(data) }
+            urlSchemeTask.didFinish()
+        }
+        lock.lock()
+        tasks[identifier] = task
+        lock.unlock()
+        task.resume()
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
+        lock.lock()
+        let task = tasks.removeValue(forKey: identifier)
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private func removeTask(_ identifier: ObjectIdentifier) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return tasks.removeValue(forKey: identifier) != nil
     }
 }
 
@@ -354,10 +430,15 @@ struct SimulatorWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.preferences.isElementFullscreenEnabled = true
+        configuration.setURLSchemeHandler(
+            context.coordinator.schemeHandler,
+            forURLScheme: "apf-simulator"
+        )
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
+        webView.alphaValue = 0
         context.coordinator.load(url, in: webView)
         return webView
     }
@@ -369,6 +450,9 @@ struct SimulatorWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var lastURL: URL?
+        private var verificationTask: Task<Void, Never>?
+        private var didWriteDiagnostics = false
+        let schemeHandler = SimulatorSchemeHandler()
         let onError: (String) -> Void
 
         init(onError: @escaping (String) -> Void) {
@@ -376,23 +460,26 @@ struct SimulatorWebView: NSViewRepresentable {
         }
 
         func load(_ url: URL, in webView: WKWebView) {
+            recordDiagnosticEvent("开始加载 \(url.absoluteString)")
+            verificationTask?.cancel()
+            verificationTask = nil
             lastURL = url
-            Task {
-                do {
-                    let (data, response) = try await URLSession.shared.data(from: url)
-                    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                        throw URLError(.badServerResponse)
-                    }
-                    let html = String(decoding: data, as: UTF8.self)
-                    await MainActor.run {
-                        guard self.lastURL == url else { return }
-                        webView.loadHTMLString(html, baseURL: url)
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.onError("模拟器页面加载失败：\(error.localizedDescription)")
-                    }
-                }
+            webView.alphaValue = 0
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.scheme = "apf-simulator"
+            components?.host = "runtime"
+            components?.port = nil
+            let presentationURL = components?.url ?? url
+            let request = URLRequest(
+                url: presentationURL,
+                cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+                timeoutInterval: 30
+            )
+            webView.load(request)
+            Task { @MainActor [weak self, weak webView] in
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, let webView else { return }
+                self.verifyPresentation(in: webView)
             }
         }
 
@@ -406,16 +493,130 @@ struct SimulatorWebView: NSViewRepresentable {
                 return
             }
             let allowed = destination.scheme == "about"
+                || destination.scheme == "apf-simulator"
                 || destination.scheme == "https"
-                || (destination.scheme == "http" && destination.host == "localhost")
+                || (destination.scheme == "http"
+                    && ["localhost", "127.0.0.1"].contains(destination.host ?? ""))
+            recordDiagnosticEvent("导航 \(destination.absoluteString) \(allowed ? "允许" : "拦截")")
             decisionHandler(allowed ? .allow : .cancel)
         }
 
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard webView.url?.scheme == "apf-simulator" else {
+                recordDiagnosticEvent("忽略初始空白页")
+                return
+            }
+            verifyPresentation(in: webView)
+        }
+
+        private func verifyPresentation(in webView: WKWebView) {
+            guard verificationTask == nil else { return }
+            verificationTask = Task { @MainActor [weak self, weak webView] in
+                guard let self, let webView else { return }
+                for _ in 0..<40 {
+                    guard !Task.isCancelled, self.lastURL != nil else { return }
+                    let script = """
+                    (() => {
+                      const root = document.querySelector('.emulator');
+                      const style = getComputedStyle(document.body);
+                      return {
+                        ready: document.readyState,
+                        styles: document.styleSheets.length,
+                        scripts: document.scripts.length,
+                        root: Boolean(root),
+                        display: root ? getComputedStyle(root).display : 'missing',
+                        background: style.backgroundColor
+                      };
+                    })()
+                    """
+                    let evaluation = try? await webView.evaluateJavaScript(script) as? [String: Any]
+                    self.recordDiagnosticEvent("DOM \(String(describing: evaluation))")
+                    if let result = evaluation,
+                       ((result["styles"] as? NSNumber)?.intValue ?? 0) > 0,
+                       ((result["root"] as? NSNumber)?.boolValue ?? false),
+                       result["display"] as? String != "none" {
+                        webView.alphaValue = 1
+                        await self.writeDiagnosticsIfRequested(result, webView: webView)
+                        self.verificationTask = nil
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+                self.verificationTask = nil
+                self.onError("模拟器界面资源加载超时，请点击“重新启动”再试。")
+            }
+        }
+
+        private func recordDiagnosticEvent(_ message: String) {
+            guard let directory = ProcessInfo.processInfo.environment[
+                "APF_SIMULATOR_DIAGNOSTICS_DIR"
+            ] else { return }
+            let output = URL(fileURLWithPath: directory, isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: output,
+                withIntermediateDirectories: true
+            )
+            let file = output.appendingPathComponent("simulator-events.log")
+            let line = "\(Date().timeIntervalSince1970) \(message)\n"
+            guard let data = line.data(using: .utf8) else { return }
+            if FileManager.default.fileExists(atPath: file.path),
+               let handle = try? FileHandle(forWritingTo: file) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+            } else {
+                try? data.write(to: file)
+            }
+        }
+
+        @MainActor
+        private func writeDiagnosticsIfRequested(
+            _ result: [String: Any],
+            webView: WKWebView
+        ) async {
+            guard !didWriteDiagnostics,
+                  let directory = ProcessInfo.processInfo.environment[
+                    "APF_SIMULATOR_DIAGNOSTICS_DIR"
+                  ] else { return }
+            didWriteDiagnostics = true
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+            let output = URL(fileURLWithPath: directory, isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: output,
+                withIntermediateDirectories: true
+            )
+            var report = result
+            report["url"] = webView.url?.absoluteString ?? ""
+            report["bundleNode"] = Bundle.main.resourceURL?
+                .appendingPathComponent("node/node").path ?? ""
+            if let data = try? JSONSerialization.data(
+                withJSONObject: report,
+                options: [.prettyPrinted, .sortedKeys]
+            ) {
+                try? data.write(to: output.appendingPathComponent("simulator-dom.json"))
+            }
+
+            webView.takeSnapshot(with: nil) { image, _ in
+                guard let image,
+                      let tiff = image.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiff),
+                      let png = bitmap.representation(using: .png, properties: [:]) else {
+                    return
+                }
+                try? png.write(
+                    to: output.appendingPathComponent("simulator-real-window.png")
+                )
+            }
+        }
+
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            recordDiagnosticEvent("页面加载失败 \(error.localizedDescription)")
             onError("页面加载失败：\(error.localizedDescription)")
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            recordDiagnosticEvent("页面预加载失败 \(error.localizedDescription)")
             onError("页面加载失败：\(error.localizedDescription)")
         }
 

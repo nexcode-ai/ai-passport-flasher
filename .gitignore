@@ -1,6 +1,8 @@
 .build/
 build/
+dist/
 Vendor/esptool/
+Vendor/node/
 .swiftpm/
 *.xcodeproj/xcuserdata/
 .DS_Store

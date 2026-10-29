@@ -52,7 +52,10 @@ struct DeviceInfo: Equatable {
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var tab: SidebarTab = .community
+    @Published var tab: SidebarTab =
+        ProcessInfo.processInfo.environment["APF_START_TAB"] == "simulator"
+        ? .simulator
+        : .community
     @Published var simulatorPlayID: Int?
     @Published var downloadingPlayID: Int?
     @Published var downloadProgress: Double = 0

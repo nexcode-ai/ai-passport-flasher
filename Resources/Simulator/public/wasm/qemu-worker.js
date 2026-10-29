@@ -171,9 +171,8 @@ async function start(firmware, debugEnabled = false) {
   reportProgress(91, "正在刷写固件镜像", "写入虚拟 Flash");
   emulator.load_firmware(new Uint8Array(firmware));
   reportProgress(95, "正在连接虚拟外设", "启动显示、音频与网络桥接");
-  const protocol = self.location.protocol === "https:" ? "wss:" : "ws:";
   network = new EmulatorNetworkBridge(emulator, {
-    url: `${protocol}//${self.location.host}/api/emulator-network`,
+    url: "ws://127.0.0.1:4190/api/emulator-network",
     onStatus: (detail) => postMessage({ type: "network-status", detail }),
     onEvent: (detail) => postMessage({ type: "network-event", detail }),
   });
