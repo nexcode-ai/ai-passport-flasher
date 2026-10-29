@@ -26,7 +26,7 @@ enum SnapshotDriver {
         await shoot(ContentView(), app: app, community: community, size: CGSize(width: 1280, height: 1380), to: dir, name: "01-community")
 
         if let play = community.featured.first(where: \.isInstallable) ?? community.plays.first {
-            await shoot(PlayDetailView(play: play) {}, app: app, community: community, size: CGSize(width: 900, height: 680), to: dir, name: "02-play-detail")
+            await shoot(PlayDetailView(play: play) {}, app: app, community: community, size: CGSize(width: 980, height: 720), to: dir, name: "02-play-detail")
         }
 
         app.clearPlan()
@@ -92,13 +92,44 @@ enum SnapshotDriver {
         await sleep(2)
         await capture(window: window, to: dir.appendingPathComponent("real-community.png"))
 
-        if let play = community.featured.first ?? community.plays.first {
+        let visiblePlays = community.featured + community.plays
+        if let play = visiblePlays.first(where: { $0.title.display.contains("城市电台") })
+            ?? visiblePlays.first {
+            app.detailPlay = play
+            await waitUntil(timeout: 5) {
+                NSApp.windows.contains { $0 !== window && $0.isVisible && $0.contentView != nil }
+            }
+            await sleep(1)
+            if let sheet = NSApp.windows.first(where: { $0 !== window && $0.isVisible && $0.contentView != nil }) {
+                await capture(window: sheet, to: dir.appendingPathComponent("real-play-detail.png"))
+            }
+            app.detailPlay = nil
+            await sleep(1)
             SimulatorSession.shared.tryPlay(play, app: app)
         } else {
             app.tab = .simulator
         }
         await sleep(16)
         await capture(window: window, to: dir.appendingPathComponent("real-simulator.png"))
+
+        app.clearPlan()
+        app.job = .idle
+        app.tab = .flash
+        await sleep(2)
+        await capture(window: window, to: dir.appendingPathComponent("real-install.png"))
+
+        app.job = .succeeded
+        await sleep(1)
+        await capture(window: window, to: dir.appendingPathComponent("real-install-success.png"))
+
+        app.job = .idle
+        app.tab = .restore
+        await sleep(1)
+        await capture(window: window, to: dir.appendingPathComponent("real-restore.png"))
+
+        app.tab = .about
+        await sleep(2)
+        await capture(window: window, to: dir.appendingPathComponent("real-about.png"))
         NSApp.terminate(nil)
     }
 

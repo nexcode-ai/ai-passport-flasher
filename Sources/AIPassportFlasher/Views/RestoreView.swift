@@ -151,27 +151,40 @@ struct AboutView: View {
                     symbol: "info.circle.fill"
                 )
                 StepCard(number: "", title: "AI Passport 刷机工具（macOS）") {
-                    InfoPair(label: "应用版本", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
-                    InfoPair(label: "目标设备", value: "FoloToy AI Passport · ESP32-C3 · 8 MB Flash · USB Serial/JTAG")
-                    InfoPair(label: "刷写后端", value: "内置 esptool \(esptoolVersion)（Espressif 官方独立可执行文件，无需 Python）")
-                    InfoPair(label: "esptool 路径", value: app.esptoolURL?.path ?? "缺失")
+                    AboutInfoRow(symbol: "app.badge", label: "应用版本",
+                                 value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
+                    Divider()
+                    AboutInfoRow(symbol: "cpu", label: "目标设备",
+                                 value: "FoloToy AI Passport · ESP32-C3 · 8 MB Flash")
+                    Divider()
+                    AboutInfoRow(symbol: "wrench.and.screwdriver", label: "刷写后端",
+                                 value: "内置 esptool \(esptoolVersion)，无需安装 Python")
                 }
                 StepCard(number: "", title: "数据来源") {
-                    Text("玩法社区：GET https://ai-passport.folotoy.cn/api/plays（公开、无需登录，分页）").font(.callout.monospaced())
-                    Text("官方精选：GET https://ai-passport.folotoy.cn/api/plays/recommendations?limit=20").font(.callout.monospaced())
-                    Text("固件下载：GET /api/download/community/<slug>，下载后核对大小与 SHA-256").font(.callout.monospaced())
-                    Text("出厂固件：/assets/firmwares/ai-passport-default/manifest.json").font(.callout.monospaced())
-                    Text("只有点击「安装」时才会下载固件（网站会统计一次下载）。本程序与 FoloToy 官方无关，数据接口可能随网站更新而变化。")
-                        .font(.callout).foregroundStyle(.secondary)
+                    AboutInfoRow(symbol: "square.grid.2x2", label: "玩法社区", value: "公开目录，无需登录")
+                    Divider()
+                    AboutInfoRow(symbol: "sparkles", label: "官方精选", value: "FoloToy 推荐作品")
+                    Divider()
+                    AboutInfoRow(symbol: "checkmark.shield", label: "固件校验", value: "下载后核对文件大小与 SHA-256")
+                    Divider()
+                    AboutInfoRow(symbol: "arrow.counterclockwise", label: "出厂固件", value: "官方清单与四个默认分区")
+                    Text("只有点击 \"安装\" 时才会下载固件（网站会统计一次下载）。本程序与 FoloToy 官方无关，数据接口可能随网站更新而变化。")
+                        .font(.meta).foregroundStyle(.secondary)
+                        .padding(.top, Space.xxs)
                 }
                 StepCard(number: "", title: "许可") {
-                    Text("esptool 以 GPL-2.0-or-later 许可发布，其许可证随应用一并提供（Resources/esptool/LICENSE）。").font(.callout)
-                    HStack(spacing: 4) {
-                        Text("玩法模拟器基于")
-                        Link("VOID001/FoloToy-Passport-Simulator", destination: URL(string: "https://github.com/VOID001/FoloToy-Passport-Simulator")!)
-                        Text("（MIT）及 ESP-EMU，许可证随应用一并提供（Resources/simulator/LICENSE）。")
+                    AboutInfoRow(symbol: "terminal", label: "esptool", value: "GPL-2.0-or-later · Espressif")
+                    Divider()
+                    HStack(spacing: Space.s) {
+                        Image(systemName: "gamecontroller")
+                            .foregroundStyle(Brand.accent)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Link("FoloToy Passport Simulator", destination: URL(string: "https://github.com/VOID001/FoloToy-Passport-Simulator")!)
+                                .font(.bodyText.weight(.semibold))
+                            Text("MIT · VOID001 / ESP-EMU").font(.meta).foregroundStyle(.secondary)
+                        }
                     }
-                    .font(.callout)
                 }
             }
             .padding(.horizontal, 32)
@@ -188,5 +201,26 @@ struct AboutView: View {
         guard app.esptoolURL != nil else { return "缺失" }
         let out = try? await EsptoolRunner().run(["version"]) { _, _ in }
         return out?.split(separator: "\n").last.map(String.init) ?? "未知"
+    }
+}
+
+private struct AboutInfoRow: View {
+    let symbol: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Brand.accent)
+                .frame(width: 28, height: 28)
+                .background(Brand.accentSoft, in: RoundedRectangle(cornerRadius: Radius.control))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.bodyText.weight(.semibold))
+                Text(value).font(.meta).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+        }
     }
 }

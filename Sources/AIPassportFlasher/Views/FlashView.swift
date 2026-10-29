@@ -311,7 +311,7 @@ struct FirmwareStep: View {
     private var localPicker: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("推荐从「玩法社区」挑选并安装；已有 .bin 文件也可以在这里选择本地固件。文件只在本机读取。")
+                Text("推荐从 \"玩法社区\" 挑选并安装；已有 .bin 文件也可以在这里选择本地固件。文件只在本机读取。")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button { app.tab = .community } label: { Label("去玩法社区", systemImage: "square.grid.2x2") }
@@ -482,7 +482,7 @@ struct WriteStep: View {
 
     var body: some View {
         StepCard(number: "03", title: "写入与重启") {
-            Banner(kind: .warning, text: "写入会替换设备中的现有玩法和相关数据。之后可随时通过「恢复出厂固件」回到默认状态；写入期间请保持连接。")
+            Banner(kind: .warning, text: "写入会替换设备中的现有玩法和相关数据。之后可随时通过 \"恢复出厂固件\" 回到默认状态；写入期间请保持连接。")
             HStack(spacing: 18) {
                 Picker("波特率", selection: $app.baud) {
                     ForEach(app.baudOptions, id: \.self) { Text("\($0)").tag($0) }

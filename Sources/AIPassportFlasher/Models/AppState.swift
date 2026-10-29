@@ -174,13 +174,13 @@ final class AppState: ObservableObject {
     func install(_ play: Play) {
         guard downloadingPlayID == nil, !job.isRunning else { return }
         guard play.isInstallable else {
-            downloadError = "「\(play.title.display)」暂未提供可安装的固件。"
+            downloadError = "\"\(play.title.display)\" 暂未提供可安装的固件。"
             return
         }
         downloadingPlayID = play.id
         downloadProgress = 0
         downloadError = nil
-        appendLog("正在获取「\(play.title.display)」固件…")
+        appendLog("正在获取 \"\(play.title.display)\" 固件…")
         Task {
             do {
                 let file = try await CommunityAPI.downloadFirmware(for: play) { p in
@@ -188,7 +188,7 @@ final class AppState: ObservableObject {
                 }
                 usePlay(play, file: file)
             } catch {
-                downloadError = "下载「\(play.title.display)」失败：\(error.localizedDescription)"
+                downloadError = "下载 \"\(play.title.display)\" 失败：\(error.localizedDescription)"
                 appendLog(downloadError!, .error)
             }
             downloadingPlayID = nil
@@ -203,7 +203,7 @@ final class AppState: ObservableObject {
             planSource = .featured(title: play.title.display, sha256: play.expectedSHA256 ?? "")
             selectedPlay = play
             tab = .flash
-            appendLog("已载入「\(play.title.display)」，大小与 SHA-256 校验通过。请连接设备并确认后开始安装。", .success)
+            appendLog("已载入 \"\(play.title.display)\"，大小与 SHA-256 校验通过。请连接设备并确认后开始安装。", .success)
         } catch { appendLog("无法读取下载的固件：\(error.localizedDescription)", .error) }
     }
 

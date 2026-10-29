@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CommunityView: View {
@@ -518,87 +519,125 @@ struct PlayDetailView: View {
     let play: Play
     let close: () -> Void
     @State private var showTechnicalDetails = false
+    @State private var showAllInstructions = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                IconTile(symbol: "arrow.down.to.line.compact", size: 36)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("安装引导").font(.headline)
-                    Text("先确认玩法信息，再连接设备完成安装").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: Space.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("安装玩法").font(.sectionTitle)
+                    Text("确认玩法信息，试用后再安装到 AI Passport")
+                        .font(.meta)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(action: close) {
-                    Label("关闭", systemImage: "xmark")
-                }
-                    .buttonStyle(.app(.tertiary, size: .small))
+                IconButton(symbol: "xmark", help: "关闭", action: close)
                     .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
+            .padding(.horizontal, Space.xl)
+            .frame(height: 64)
             .background(.bar)
             Divider()
 
             HStack(spacing: 0) {
-                ZStack(alignment: .bottomLeading) {
-                    CoverImage(url: play.coverURL)
-                        .frame(width: 330)
-                        .frame(maxHeight: .infinity)
-                        .clipped()
-                    LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Tag(text: play.categoryLabel, tint: .white, onDark: true)
-                            if play.mustPlay == true { Tag(text: "官方必玩", tint: .white, onDark: true) }
+                VStack(alignment: .leading, spacing: Space.m) {
+                    FittedPlayArtwork(url: play.coverURL)
+                        .frame(width: 268, height: 360)
+                    VStack(alignment: .leading, spacing: Space.xs) {
+                        HStack(spacing: 6) {
+                            Tag(text: play.categoryLabel)
+                            if play.mustPlay == true { Tag(text: "官方必玩", tint: .orange) }
                         }
                         Text(play.title.display)
-                            .font(.system(size: 25, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        Text("开发者 \(play.author ?? "—")").foregroundStyle(.secondary)
-                            .colorScheme(.dark)
-                        Stats(play: play).colorScheme(.dark)
+                            .font(.heroTitle)
+                            .lineLimit(2)
+                        Text("开发者 \(play.author ?? "—")")
+                            .font(.bodyText)
+                            .foregroundStyle(.secondary)
+                        Stats(play: play)
                     }
-                    .padding(22)
+                    Spacer()
                 }
-                .frame(width: 330)
+                .padding(Space.xl)
+                .frame(width: 316, alignment: .topLeading)
+                .background(Brand.surfaceSunken.opacity(0.72))
 
                 VStack(spacing: 0) {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: Space.l) {
                             JourneyStrip(step: .install)
-                            HStack(spacing: 0) {
-                                GuideStepBadge(number: 1, title: "选择玩法", complete: true, active: false)
-                                GuideConnector(complete: true)
-                                GuideStepBadge(number: 2, title: "连接设备", complete: app.selectedPort != nil, active: app.selectedPort == nil)
-                                GuideConnector(complete: false)
-                                GuideStepBadge(number: 3, title: "确认安装", complete: false, active: app.selectedPort != nil)
+
+                            VStack(alignment: .leading, spacing: Space.xs) {
+                                Text("玩法简介").font(.cardTitle)
+                                Text(summary)
+                                    .font(.bodyText)
+                                    .foregroundStyle(.secondary)
+                                    .lineSpacing(3)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            Text(play.description?.display ?? "这个玩法暂时没有介绍。")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .lineSpacing(3)
-
-                            if let instructions = play.instructions?.display, !instructions.isEmpty {
-                                GuideInfoBlock(
-                                    symbol: "hand.tap",
-                                    title: "怎么玩",
-                                    text: instructions
+                            LazyVGrid(
+                                columns: Array(repeating: GridItem(.flexible(), spacing: Space.xs), count: 3),
+                                spacing: Space.xs
+                            ) {
+                                DetailFactChip(symbol: networkSymbol, title: networkLabel)
+                                DetailFactChip(
+                                    symbol: "internaldrive",
+                                    title: play.expectedSize.map {
+                                        ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)
+                                    } ?? "固件待发布"
                                 )
+                                DetailFactChip(symbol: "button.programmable", title: "实体按键操控")
                             }
 
-                            GuideInfoBlock(
-                                symbol: app.selectedPort == nil ? "cable.connector.slash" : "checkmark.circle.fill",
-                                title: app.selectedPort == nil ? "下一步：连接 AI Passport" : "设备已经连接",
-                                text: app.selectedPort == nil
-                                    ? "下载并校验固件后，会进入设备连接页面。请准备一根支持数据传输的 Type-C 线。"
-                                    : "已检测到 \((app.selectedPort!.path as NSString).lastPathComponent)，下载完成后可直接确认写入。"
-                            )
+                            if !instructionSteps.isEmpty {
+                                VStack(alignment: .leading, spacing: Space.s) {
+                                    Text("怎么玩").font(.cardTitle)
+                                    ForEach(Array(visibleInstructionSteps.enumerated()), id: \.offset) { index, text in
+                                        InstructionStepRow(number: index + 1, text: text)
+                                    }
+                                    if instructionSteps.count > 4 {
+                                        Button {
+                                            withAnimation(.easeOut(duration: 0.18)) {
+                                                showAllInstructions.toggle()
+                                            }
+                                        } label: {
+                                            Label(
+                                                showAllInstructions ? "收起步骤" : "展开全部 \(instructionSteps.count) 步",
+                                                systemImage: showAllInstructions ? "chevron.up" : "chevron.down"
+                                            )
+                                        }
+                                        .buttonStyle(.app(.tertiary, size: .small))
+                                    }
+                                }
+                            }
+
+                            ControlLegend()
+
+                            HStack(alignment: .top, spacing: Space.s) {
+                                Image(systemName: app.selectedPort == nil ? "cable.connector" : "checkmark.circle.fill")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Brand.accent)
+                                    .frame(width: 32, height: 32)
+                                    .background(Brand.accentSoft, in: RoundedRectangle(cornerRadius: Radius.control))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(app.selectedPort == nil ? "下一步：连接设备" : "设备已连接")
+                                        .font(.bodyText.weight(.semibold))
+                                    Text(app.selectedPort == nil
+                                         ? "准备一根支持数据传输的 Type-C 线，下载完成后进入连接与写入页面。"
+                                         : "已检测到 \((app.selectedPort!.path as NSString).lastPathComponent)，可继续安装。")
+                                        .font(.meta)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(Space.s)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Brand.accentSoft, in: RoundedRectangle(cornerRadius: Radius.inset))
 
                             DisclosureGroup("固件与更新信息", isExpanded: $showTechnicalDetails) {
-                                VStack(alignment: .leading, spacing: 7) {
+                                VStack(alignment: .leading, spacing: Space.xs) {
                                     if let changelog = play.changelog?.display, !changelog.isEmpty {
-                                        Text(changelog).font(.callout).foregroundStyle(.secondary)
+                                        Text(changelog).foregroundStyle(.secondary)
                                     }
                                     Divider()
                                     Text("格式：\(play.format == "esp-merged-0x0" ? "合并固件，写入地址 0x0" : play.format)")
@@ -609,7 +648,7 @@ struct PlayDetailView: View {
                                         Text("SHA-256：\(hash)").textSelection(.enabled)
                                     }
                                 }
-                                .font(.caption.monospaced())
+                                .font(.meta.monospaced())
                                 .padding(.top, 9)
                             }
 
@@ -617,12 +656,18 @@ struct PlayDetailView: View {
                                 Banner(kind: .error, text: error) { app.downloadError = nil }
                             }
                         }
-                        .padding(24)
+                        .padding(Space.xl)
+                        .overlayScrollers()
                     }
 
                     Divider()
-                    HStack(spacing: 12) {
-                        Link("在网页中查看", destination: play.pageURL)
+                    HStack(spacing: Space.xs) {
+                        Button {
+                            NSWorkspace.shared.open(play.pageURL)
+                        } label: {
+                            Label("网页详情", systemImage: "safari")
+                        }
+                        .buttonStyle(.app(.tertiary))
                         Button {
                             close()
                             SimulatorSession.shared.tryPlay(play, app: app)
@@ -641,22 +686,171 @@ struct PlayDetailView: View {
                             Button {
                                 app.install(play)
                             } label: {
-                                Label("下载并继续", systemImage: "arrow.down.circle.fill")
+                                Label("下载并安装", systemImage: "arrow.down.circle.fill")
                             }
-                            .buttonStyle(.app(.primary, size: .large))
+                            .buttonStyle(.app(.primary))
                             .keyboardShortcut(.defaultAction)
                             .disabled(!play.isInstallable || app.downloadingPlayID != nil || app.job.isRunning)
                         }
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, Space.xl)
+                    .frame(height: 64)
                     .background(.bar)
                 }
             }
         }
-        .frame(width: 900, height: 680)
-        .background(Brand.surface)
+        .frame(width: 980, height: 720)
+        .background(PageBackground())
         .onChange(of: app.tab) { _, tab in if tab == .flash { close() } }
+    }
+
+    private var summary: String {
+        let text = (play.description?.display ?? "这个玩法暂时没有介绍。")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count > 190 else { return text }
+        return String(text.prefix(188)) + "…"
+    }
+
+    private var instructionSteps: [String] {
+        guard let raw = play.instructions?.display.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return [] }
+        let numbered = raw.replacingOccurrences(
+            of: #"(?:^|\s)(?:步骤\s*)?\d+[\.、\)）:：]\s*"#,
+            with: "\n",
+            options: .regularExpression
+        )
+        var parts = numbered
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if parts.count == 1, raw.count > 100 {
+            parts = raw
+                .components(separatedBy: CharacterSet(charactersIn: "；;"))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return parts
+    }
+
+    private var visibleInstructionSteps: [String] {
+        showAllInstructions ? instructionSteps : Array(instructionSteps.prefix(4))
+    }
+
+    private var networkLabel: String {
+        let text = "\((play.description?.display ?? "")) \((play.instructions?.display ?? ""))".lowercased()
+        return ["wi-fi", "wifi", "网络", "在线", "电台"].contains(where: text.contains)
+            ? "需要 Wi-Fi"
+            : "设备本地运行"
+    }
+
+    private var networkSymbol: String {
+        networkLabel == "需要 Wi-Fi" ? "wifi" : "iphone.and.arrow.forward"
+    }
+}
+
+private struct FittedPlayArtwork: View {
+    let url: URL?
+
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case let .success(image):
+                ZStack {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .blur(radius: 28)
+                        .scaleEffect(1.18)
+                        .opacity(0.34)
+                    Rectangle().fill(.ultraThinMaterial)
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .padding(Space.s)
+                }
+            case .failure:
+                Image(systemName: "photo")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.secondary)
+            default:
+                ProgressView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Brand.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Brand.hairline))
+        .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
+    }
+}
+
+private struct DetailFactChip: View {
+    let symbol: String
+    let title: String
+
+    var body: some View {
+        Label(title, systemImage: symbol)
+            .font(.meta.weight(.semibold))
+            .foregroundStyle(.primary.opacity(0.82))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+            .background(Brand.surfaceSunken, in: RoundedRectangle(cornerRadius: Radius.field))
+            .overlay(RoundedRectangle(cornerRadius: Radius.field).strokeBorder(Brand.hairline))
+    }
+}
+
+private struct InstructionStepRow: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.s) {
+            Text("\(number)")
+                .font(.meta.weight(.bold).monospacedDigit())
+                .foregroundStyle(Brand.accent)
+                .frame(width: 26, height: 26)
+                .background(Brand.accentSoft, in: RoundedRectangle(cornerRadius: Radius.control))
+            Text(text)
+                .font(.bodyText)
+                .foregroundStyle(.primary.opacity(0.84))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+        }
+    }
+}
+
+private struct ControlLegend: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text("设备按键").font(.cardTitle)
+            HStack(spacing: Space.s) {
+                ControlKeycap(key: "UP", action: "上一项")
+                ControlKeycap(key: "DOWN", action: "下一项")
+                ControlKeycap(key: "OK", action: "确认")
+            }
+        }
+    }
+}
+
+private struct ControlKeycap: View {
+    let key: String
+    let action: String
+
+    var body: some View {
+        HStack(spacing: Space.xs) {
+            Text(key)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(Brand.accent)
+                .padding(.horizontal, 7)
+                .frame(height: 24)
+                .background(Brand.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Brand.accent.opacity(0.28)))
+                .shadow(color: .black.opacity(0.07), radius: 1, y: 1)
+            Text(action).font(.meta).foregroundStyle(.secondary)
+        }
     }
 }
 
