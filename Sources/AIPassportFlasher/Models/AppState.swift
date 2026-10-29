@@ -77,6 +77,7 @@ final class AppState: ObservableObject {
     @Published var consent = false
     @Published var job: JobState = .idle
     @Published var progress: Double = 0
+    @Published var showCompletionActions = false
     @Published var log: [LogLine] = []
 
     let baudOptions = [115200, 230400, 460800, 921600]
@@ -155,6 +156,11 @@ final class AppState: ObservableObject {
     func removePartition(_ id: UUID) { partitionImages.removeAll { $0.id == id } }
 
     func clearPlan(keepMode: Bool = false) {
+        if !job.isRunning {
+            job = .idle
+            progress = 0
+            showCompletionActions = false
+        }
         mergedImage = nil
         partitionImages = []
         planSource = .local
@@ -167,6 +173,13 @@ final class AppState: ObservableObject {
             restoreTempDir = nil
         }
         if !keepMode { mode = .merged }
+    }
+
+    func prepareAnotherInstall(destination: SidebarTab = .community) {
+        guard !job.isRunning else { return }
+        clearPlan()
+        downloadError = nil
+        tab = destination
     }
 
     /// Downloads (only on explicit click) and verifies a community play, then

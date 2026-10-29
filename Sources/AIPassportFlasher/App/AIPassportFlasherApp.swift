@@ -202,7 +202,11 @@ struct DeviceStatusPill: View {
 
     var body: some View {
         Button {
-            app.tab = .flash
+            if app.job == .succeeded {
+                app.showCompletionActions.toggle()
+            } else {
+                app.tab = .flash
+            }
         } label: {
             HStack(spacing: 8) {
                 ZStack {
@@ -234,7 +238,70 @@ struct DeviceStatusPill: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("查看设备与安装状态")
+        .help(app.job == .succeeded ? "查看安装完成后的下一步" : "查看设备与安装状态")
+        .popover(isPresented: $app.showCompletionActions, arrowEdge: .bottom) {
+            completionPopover
+        }
+        .onChange(of: app.job) { _, job in
+            if job != .succeeded { app.showCompletionActions = false }
+        }
+    }
+
+    private var completionPopover: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack(spacing: Space.s) {
+                ZStack {
+                    Circle().fill(Color.green.opacity(0.14))
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.green)
+                }
+                .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("安装已完成").font(.headline)
+                    Text(app.selectedPlay?.title.display ?? "固件已写入设备")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Text("设备已自动重启。你可以继续安装其他玩法，或前往完成页查看使用提示。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: Space.xs) {
+                Button {
+                    app.prepareAnotherInstall()
+                } label: {
+                    Label("安装其他玩法", systemImage: "square.grid.2x2")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.app(.primary))
+
+                HStack(spacing: Space.xs) {
+                    Button {
+                        app.tab = .flash
+                        app.showCompletionActions = false
+                    } label: {
+                        Label("查看完成页", systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.app(.secondary, size: .small))
+
+                    Button {
+                        app.prepareAnotherInstall(destination: .restore)
+                    } label: {
+                        Label("恢复设备", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.app(.secondary, size: .small))
+                }
+            }
+        }
+        .padding(Space.l)
+        .frame(width: 330)
     }
 
     private var statusTitle: String {

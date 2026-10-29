@@ -111,16 +111,14 @@ struct InstallSuccessView: View {
 
             HStack(spacing: 12) {
                 Button {
-                    app.clearPlan()
-                    app.tab = .community
+                    app.prepareAnotherInstall()
                 } label: {
-                    Label("发现更多玩法", systemImage: "sparkles")
+                    Label("安装其他玩法", systemImage: "sparkles")
                 }
                 .buttonStyle(.app(.primary, size: .large))
 
                 Button {
-                    app.clearPlan()
-                    app.tab = .restore
+                    app.prepareAnotherInstall(destination: .restore)
                 } label: {
                     Label("恢复出厂固件", systemImage: "arrow.counterclockwise")
                 }

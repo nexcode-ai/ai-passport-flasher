@@ -134,7 +134,17 @@ enum SnapshotDriver {
         await sleep(1)
         await capture(window: window, to: dir.appendingPathComponent("real-install-success.png"))
 
-        app.job = .idle
+        app.showCompletionActions = true
+        await sleep(1)
+        if let popover = NSApp.windows.first(where: {
+            $0 !== window && $0.isVisible && $0.contentView != nil
+        }) {
+            await capture(window: popover, to: dir.appendingPathComponent("real-install-completion-actions.png"))
+        }
+        app.prepareAnotherInstall()
+        await sleep(2)
+        await capture(window: window, to: dir.appendingPathComponent("real-install-another-play.png"))
+
         app.tab = .restore
         await sleep(1)
         await capture(window: window, to: dir.appendingPathComponent("real-restore.png"))

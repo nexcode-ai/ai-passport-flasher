@@ -69,6 +69,56 @@ final class ProgressTests: XCTestCase {
     }
 }
 
+@MainActor
+final class AppStateTests: XCTestCase {
+    func testSelectingAnotherFirmwareResetsCompletedInstall() throws {
+        let firmware = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".bin")
+        try Data([0xE9, 0, 0, 0]).write(to: firmware)
+        defer { try? FileManager.default.removeItem(at: firmware) }
+
+        let app = AppState()
+        app.job = .succeeded
+        app.progress = 1
+        app.consent = true
+
+        app.setMerged(firmware)
+
+        XCTAssertEqual(app.job, .idle)
+        XCTAssertEqual(app.progress, 0)
+        XCTAssertFalse(app.consent)
+        XCTAssertEqual(app.images.count, 1)
+    }
+
+    func testClearPlanDoesNotInterruptRunningInstall() {
+        let app = AppState()
+        app.job = .running("正在写入")
+        app.progress = 0.42
+
+        app.clearPlan()
+
+        XCTAssertEqual(app.job, .running("正在写入"))
+        XCTAssertEqual(app.progress, 0.42)
+    }
+
+    func testPrepareAnotherInstallClearsCompletionAndNavigates() {
+        let app = AppState()
+        app.job = .succeeded
+        app.progress = 1
+        app.downloadError = "旧错误"
+        app.showCompletionActions = true
+        app.tab = .flash
+
+        app.prepareAnotherInstall(destination: .restore)
+
+        XCTAssertEqual(app.job, .idle)
+        XCTAssertEqual(app.progress, 0)
+        XCTAssertNil(app.downloadError)
+        XCTAssertFalse(app.showCompletionActions)
+        XCTAssertEqual(app.tab, .restore)
+    }
+}
+
 /// Runs the real bundled esptool without any device attached.
 final class EsptoolRunnerTests: XCTestCase {
     override func setUpWithError() throws {
