@@ -1,0 +1,203 @@
+    :root {
+      color-scheme: light dark;
+      --apf-accent: #0E9F57;
+      --apf-stage: #F4F5F4;
+      --apf-line: rgba(0, 0, 0, .10);
+      --mint: #20E47C;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --apf-accent: #20E47C;
+        --apf-stage: #1C1E20;
+        --apf-line: rgba(255, 255, 255, .11);
+      }
+    }
+    html, body {
+      background: transparent !important;
+      overflow: hidden !important;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
+    }
+    .toolbar, .try-panel, .site-footer, .debug-panel, .simulator-actions, .capture-feedbacks, dialog {
+      display: none !important;
+    }
+    .emulator { display: block !important; min-height: 0 !important; height: 100vh; margin: 0 !important; }
+    .workspace { display: block !important; height: 100vh; }
+    .stage { height: 100vh; padding: 18px !important; background: var(--apf-stage) !important; }
+    .stage:fullscreen { background: #0B0D0F !important; }
+    .passport-shell {
+      width: min(calc(100vw - 36px), calc((100vh - 36px) * 566 / 882)) !important;
+      aspect-ratio: 566 / 882 !important;
+      overflow: hidden !important;
+      border: 1px solid var(--apf-line) !important;
+      border-radius: 20px !important;
+      background: var(--apf-stage) !important;
+      box-shadow: 0 14px 28px rgba(0, 0, 0, .16) !important;
+      filter: none !important;
+    }
+    .apf-shell-content {
+      position: absolute;
+      left: -40.46%;
+      top: -4.31%;
+      width: 180.92%;
+      height: 109.64%;
+    }
+    @media (prefers-color-scheme: dark) {
+      .passport-shell { box-shadow: 0 18px 34px rgba(0, 0, 0, .42) !important; }
+    }
+    .screen-overlay strong, .loading-progress-meta, .loading-progress small {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
+      letter-spacing: 0 !important;
+    }
+    .loading-progress-track span { background: #20E47C !important; box-shadow: none !important; }
+    .hardware-controls {
+      z-index: 4 !important;
+      pointer-events: none !important;
+    }
+    .hardware-key.apf-physical-key {
+      width: clamp(36px, 5.2%, 42px) !important;
+      min-width: 36px !important;
+      height: auto !important;
+      min-height: 36px !important;
+      aspect-ratio: 1 / 1 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      pointer-events: auto !important;
+      appearance: none !important;
+      border: 0 !important;
+      border-radius: 50% !important;
+      color: rgba(244, 249, 247, .90) !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+      transform: translate(-50%, -50%) scale(1) !important;
+      transition:
+        transform .10s cubic-bezier(.2, .8, .2, 1),
+        border-color .15s ease,
+        background .15s ease,
+        box-shadow .15s ease !important;
+    }
+    .hardware-key.apf-physical-key .apf-key-face {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(231, 241, 238, .34);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .03) 36%, transparent 54%),
+        rgba(12, 17, 19, .58) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .34),
+        0 2px 4px rgba(0, 0, 0, .26);
+      backdrop-filter: blur(3px) brightness(.90);
+      pointer-events: none;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .hardware-key.apf-physical-key .apf-key-label {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      color: rgba(247, 251, 249, .90);
+      font: 650 clamp(8px, .92vw, 10.5px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+      letter-spacing: -.025em !important;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .58);
+      pointer-events: none;
+    }
+    .hardware-key.apf-physical-key.key-power .apf-key-label {
+      font-size: clamp(7px, .72vw, 8.5px) !important;
+      letter-spacing: -.04em !important;
+    }
+    .hardware-key.apf-physical-key .apf-hold-ring {
+      position: absolute;
+      inset: -3px;
+      width: calc(100% + 6px);
+      height: calc(100% + 6px);
+      overflow: visible;
+      opacity: 0;
+      pointer-events: none;
+      filter: drop-shadow(0 0 2px rgba(32, 228, 124, .45));
+      transition: opacity .12s ease;
+    }
+    .hardware-key.apf-physical-key .apf-hold-ring circle {
+      fill: none;
+      stroke: #20E47C;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+    .hardware-key.apf-physical-key.apf-holding .apf-hold-ring,
+    .hardware-key.apf-physical-key.apf-long-ready .apf-hold-ring {
+      opacity: 1;
+    }
+    .hardware-key.apf-physical-key:hover {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    .hardware-key.apf-physical-key:hover .apf-key-face {
+      border-color: rgba(32, 228, 124, .62);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .20), transparent 52%),
+        rgba(20, 52, 37, .66) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .24),
+        0 0 7px rgba(32, 228, 124, .22);
+    }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:hover {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:hover .apf-key-face {
+      border-color: rgba(231, 241, 238, .34);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .03) 36%, transparent 54%),
+        rgba(12, 17, 19, .58) !important;
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, .20),
+        inset -1px -2px 3px rgba(0, 0, 0, .34),
+        0 2px 4px rgba(0, 0, 0, .26);
+    }
+    body.apf-snapshot-neutral .hardware-key.apf-physical-key:focus-visible {
+      outline: none !important;
+    }
+    .hardware-key.apf-physical-key:active,
+    .hardware-key.apf-physical-key.is-pressed {
+      transform: translate(-50%, calc(-50% + 1px)) scale(.94) !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    .hardware-key.apf-physical-key:active .apf-key-face,
+    .hardware-key.apf-physical-key.is-pressed .apf-key-face {
+      border-color: rgba(32, 228, 124, .68);
+      background: rgba(5, 10, 8, .26) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, .44), 0 0 5px rgba(32, 228, 124, .15);
+    }
+    .hardware-key.apf-physical-key.apf-long-ready {
+      box-shadow: none !important;
+    }
+    .hardware-key.apf-physical-key.apf-long-ready .apf-key-face {
+      border-color: rgba(32, 228, 124, .72);
+      box-shadow: 0 0 7px rgba(32, 228, 124, .24);
+    }
+    .hardware-key.apf-physical-key:focus-visible {
+      outline: 2px solid #20E47C !important;
+      outline-offset: 2px !important;
+    }
+    .hardware-key.apf-physical-key.key-up,
+    .hardware-key.apf-physical-key.key-down,
+    .hardware-key.apf-physical-key.key-ok {
+      left: 73.5% !important;
+    }
+    .hardware-key.apf-physical-key.key-up { top: 21.3% !important; }
+    .hardware-key.apf-physical-key.key-down { top: 35.5% !important; }
+    .hardware-key.apf-physical-key.key-ok { top: 48.8% !important; }
+    .hardware-key.apf-physical-key.key-power {
+      left: 25.9% !important;
+      top: 22% !important;
+      width: clamp(36px, 5.4%, 42px) !important;
+    }
+    

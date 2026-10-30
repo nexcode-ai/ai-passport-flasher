@@ -1,0 +1,22 @@
+{
+  "name": "ai-passport-flasher",
+  "productName": "AI Passport 刷机工具",
+  "version": "0.0.1",
+  "private": true,
+  "description": "FoloToy AI Passport 刷机工具，macOS 与 Windows 使用同一套界面。",
+  "author": "AI Passport Flasher",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "prestart": "node scripts/copy-fonts.mjs",
+    "start": "electron .",
+    "test": "node --test test/logic.test.mjs",
+    "pack:mac": "node scripts/copy-fonts.mjs && electron-builder --config electron-builder.config.cjs --mac dmg --universal",
+    "pack:win": "node scripts/copy-fonts.mjs && electron-builder --config electron-builder.config.cjs --win zip --x64"
+  },
+  "devDependencies": {
+    "@fontsource/noto-sans-sc": "^5.2.8",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}
