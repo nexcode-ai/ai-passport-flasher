@@ -1,6 +1,6 @@
 # AI Passport 刷机工具
 
-给 [FoloToy AI Passport](https://ai-passport.folotoy.cn/)（ESP32-C3 · 8 MB Flash · USB Serial/JTAG）用的桌面刷机工具。macOS 和 Windows 是同一套窗口、同一套颜色、同一套字体和同一套组件，打开之后没有样式差别。
+给 [FoloToy AI Passport](https://ai-passport.folotoy.cn/)（ESP32-C3 · 8 MB Flash · USB Serial/JTAG）用的桌面刷机工具。
 
 非官方工具。社区数据来自公开接口，不需要登录。
 
@@ -48,8 +48,6 @@
   3. 写入与重启。覆盖现有玩法前要勾选确认，并在对话框里再确认一次。进度和日志可以复制或保存。写完后硬件复位。
 - **恢复设备**：粘贴二维码链接（`?s=SN&k=KEY`），或分开填写 SN / KEY。程序下载公开的默认固件并逐项校验，在本机生成 `cardid` 分区。写入前读取芯片 MAC，必须和 SN 一致，否则停止。SN / KEY 不上传、不保存、不写进日志。登记成其他型号的设备会被拒绝。
 
-两个系统共用 Noto Sans SC，窗口按钮也是同一套红黄绿圆点，所以并排打开时排版一致。系统自带的文件选择对话框仍是各自系统的样子。
-
 ## 从源码运行
 
 桌面版在 `desktop/`。
@@ -74,7 +72,7 @@ npm run pack:win
 
 `scripts/fetch-esptool.sh` 和 `scripts/fetch-node.sh` 负责 macOS 运行时，`scripts/fetch-windows-runtime.sh` 负责 Windows 的 `esptool.exe` 和 `node.exe`。这些二进制体积大，不放进 git。
 
-仓库里还保留着原来的 SwiftUI macOS 工程，用 `./scripts/build-app.sh` 构建。发布给别人下载的 macOS 包是上面的桌面版，这样和 Windows 是同一个界面。
+仓库里还保留着原来的 SwiftUI macOS 工程，用 `./scripts/build-app.sh` 构建。发布包是上面的桌面版。
 
 ## 刷写时实际做了什么
 
